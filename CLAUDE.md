@@ -27,6 +27,8 @@ AI-generated word scramble game ("Utu's Wild Words"). Players unscramble words b
 - `npx vitest run` — Run all tests
 - `npx vitest run __tests__/lib/` — Run only lib tests
 - `npx vitest run __tests__/api/` — Run only API tests
+- `npm run test:e2e` — Run Playwright e2e tests
+- `npm run test:e2e:ui` — Run Playwright with interactive UI
 
 ## Directory Structure
 ```
@@ -53,7 +55,8 @@ src/
 - **Unit tests:** Pure functions (scramble, hash, mismatches, contact-info, env)
 - **Integration tests:** API routes + DB operations against mongodb-memory-server
 - **Component tests:** TileRack rendering and mismatch styling
-- No mocking of internal modules — mock only external services (OpenAI)
+- **E2E tests:** Playwright in `e2e/` — API routes mocked via `page.route()`, tests real browser UI
+- No mocking of internal modules — mock only external services (OpenAI, API routes in e2e)
 
 ## Manual Testing Checklist
 - [ ] New game loads with image and scrambled tiles
