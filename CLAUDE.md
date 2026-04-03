@@ -1,5 +1,8 @@
 # Picture Scramble — CLAUDE.md
 
+## Important: Read architecture.md First
+Before starting any task, read `architecture.md` in the project root. It is the architectural source of truth — containing core data models, essential flows, architectural decisions, and constraints that all code must respect. Update it when making meaningful architectural changes.
+
 ## Project Overview
 AI-generated word scramble game ("Utu's Wild Words"). Players unscramble words by dragging SVG tiles, with DALL-E generated art as clues.
 
