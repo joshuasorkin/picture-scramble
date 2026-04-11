@@ -16,7 +16,7 @@ export async function GET(
 
     if (!wordDoc || !wordDoc.imageRef) {
       return NextResponse.json(
-        { error: `No images found for '${word}'` },
+        { error: `No word entry or imageRef for '${word}'` },
         { status: 404 }
       );
     }
@@ -24,7 +24,16 @@ export async function GET(
     const imageDoc = await Image.findById(wordDoc.imageRef);
     if (!imageDoc) {
       return NextResponse.json(
-        { error: `No images found for '${word}'` },
+        {
+          error: `Dangling imageRef for '${word}': Image ${wordDoc.imageRef} not found`,
+        },
+        { status: 404 }
+      );
+    }
+
+    if (!imageDoc.images || imageDoc.images.length === 0) {
+      return NextResponse.json(
+        { error: `Image document for '${word}' has no image buffers` },
         { status: 404 }
       );
     }
@@ -39,15 +48,35 @@ export async function GET(
       );
       const uploadedIndexValue = imageDoc.uploadedIndexes[randomUploadedIdx];
 
+      let candidateIndex: unknown;
       if (
         typeof uploadedIndexValue === "object" &&
         uploadedIndexValue !== null
       ) {
-        randomIndex = uploadedIndexValue.imageIndex;
+        candidateIndex = uploadedIndexValue.imageIndex;
         contact = uploadedIndexValue.contact;
       } else {
         // Legacy format: just an integer index
-        randomIndex = uploadedIndexValue as unknown as number;
+        candidateIndex = uploadedIndexValue;
+      }
+
+      if (
+        typeof candidateIndex === "number" &&
+        Number.isInteger(candidateIndex) &&
+        candidateIndex >= 0 &&
+        candidateIndex < imageDoc.images.length &&
+        imageDoc.images[candidateIndex]
+      ) {
+        randomIndex = candidateIndex;
+      } else {
+        // Malformed uploadedIndexes entry — fall back to any available image
+        console.warn(
+          `Malformed uploadedIndexes entry for '${word}':`,
+          JSON.stringify(uploadedIndexValue),
+          `(images.length=${imageDoc.images.length}). Falling back to random image.`
+        );
+        contact = null;
+        randomIndex = Math.floor(Math.random() * imageDoc.images.length);
       }
     } else {
       randomIndex = Math.floor(Math.random() * imageDoc.images.length);
@@ -56,7 +85,9 @@ export async function GET(
     const imageBuffer = imageDoc.images[randomIndex];
     if (!imageBuffer) {
       return NextResponse.json(
-        { error: `No images found for '${word}'` },
+        {
+          error: `No image buffer at index ${randomIndex} for '${word}' (images.length=${imageDoc.images.length})`,
+        },
         { status: 404 }
       );
     }

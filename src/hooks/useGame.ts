@@ -89,12 +89,25 @@ export function useGame() {
     ): Promise<{ imageBlobUrl: string; contact?: Contact } | null> => {
       try {
         const response = await fetch(imageUrl);
-        if (!response.ok) return null;
+        if (!response.ok) {
+          const body = await response.text().catch(() => "");
+          console.error(
+            `Image fetch failed: ${imageUrl} → ${response.status} ${response.statusText} ${body}`
+          );
+          return null;
+        }
 
         const contentType = response.headers.get("content-type");
         if (contentType && contentType.includes("application/json")) {
           const jsonData = await response.json();
-          const base64Image = jsonData.image.split(";base64,").pop();
+          const base64Image = jsonData.image?.split(";base64,").pop();
+          if (!base64Image) {
+            console.error(
+              `Image fetch returned JSON without image field: ${imageUrl}`,
+              jsonData
+            );
+            return null;
+          }
           const imageBlob = await (
             await fetch(`data:image/png;base64,${base64Image}`)
           ).blob();
@@ -107,7 +120,8 @@ export function useGame() {
         const blobUrl = URL.createObjectURL(imageBlob);
         blobUrlsRef.current.push(blobUrl);
         return { imageBlobUrl: blobUrl };
-      } catch {
+      } catch (err) {
+        console.error(`Image fetch threw: ${imageUrl}`, err);
         return null;
       }
     },
@@ -131,11 +145,15 @@ export function useGame() {
         // Check if internal URL (our API route)
         if (gameData.picture.startsWith("/api/image/")) {
           const imageResult = await fetchAndCacheImage(gameData.picture);
-          if (imageResult) {
-            gameData.picture = imageResult.imageBlobUrl;
-            if (imageResult.contact) {
-              gameData.contact = imageResult.contact;
-            }
+          if (!imageResult) {
+            console.error(
+              `Failed to fetch cached image from ${gameData.picture}`
+            );
+            return null;
+          }
+          gameData.picture = imageResult.imageBlobUrl;
+          if (imageResult.contact) {
+            gameData.contact = imageResult.contact;
           }
         }
 
