@@ -1,6 +1,6 @@
 # Image Storage Migration: MongoDB → Cloudflare R2
 
-Status: code and copy script written on branch `r2-image-storage` (2026-10-11), not deployed. No images copied yet; waiting on the account setup in step 1.
+Status (2026-10-11): steps 1-4 done. Cluster backed up to `~/backups/atlas-2026-10-11`; all 1,808 images copied to R2 (1,802 unique files, 0.50 GB WebP plus 4.26 GB archived originals) and verified. Step 5 (deploy) in progress. Previous Fly image for rollback: `picture-scramble:deployment-01KNXK30VAG28QC1TF16Z35AQ0`.
 
 ## Why
 

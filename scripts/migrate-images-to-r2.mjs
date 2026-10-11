@@ -207,6 +207,19 @@ async function runSample(collection, ids) {
   }
 }
 
+// HEAD a URL, retrying network errors so one dropped connection does not
+// abort a long verification. Returns the HTTP status, or the error message.
+async function headStatus(url, attempts = 4) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return (await fetch(url, { method: "HEAD" })).status;
+    } catch (err) {
+      if (attempt === attempts) return err.cause?.code ?? err.message;
+      await new Promise((resolve) => setTimeout(resolve, 1000 * attempt));
+    }
+  }
+}
+
 async function runVerify(collection, ids) {
   const baseUrl = requireEnv("IMAGE_BASE_URL").replace(/\/+$/, "");
   let docsWithoutObjects = 0;
@@ -237,11 +250,11 @@ async function runVerify(collection, ids) {
       console.log(`${_id}: ${objects.length} objects but ${doc.legacyCount} legacy images`);
     }
     for (const { key } of objects) {
-      const response = await fetch(`${baseUrl}/${key}`, { method: "HEAD" });
+      const status = await headStatus(`${baseUrl}/${key}`);
       checked++;
-      if (!response.ok) {
+      if (status !== 200) {
         unreachable++;
-        console.log(`${_id}: ${key} -> ${response.status}`);
+        console.log(`${_id}: ${key} -> ${status}`);
       }
     }
   }
