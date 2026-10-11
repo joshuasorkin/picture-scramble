@@ -1,7 +1,20 @@
 import { getOpenAIClient } from "./client";
+import type { Contact } from "@/lib/game/contact-info";
+
+export interface ExistingPicture {
+  picture: string;
+  contact: Contact | null;
+  // True when the word already holds its maximum number of images
+  full: boolean;
+}
+
+export interface PictureResult {
+  picture: string;
+  contact: Contact | null;
+}
 
 export interface PictureDeps {
-  findExistingPicture: (word: string) => Promise<string | null>;
+  findExistingPicture: (word: string) => Promise<ExistingPicture | null>;
   storeImage: (
     word: string,
     url: string | null,
@@ -42,16 +55,22 @@ export async function generatePicture(
   word: string,
   language: string,
   deps: PictureDeps
-): Promise<string> {
+): Promise<PictureResult> {
   const existingPicture = await deps.findExistingPicture(word);
 
   if (existingPicture) {
-    // Generate an extra picture async for variety, but return the existing one
-    generateAndStorePicture(word, language, deps).catch((err) => {
-      console.error("Error generating extra picture:", err);
-    });
-    return existingPicture;
+    if (!existingPicture.full) {
+      // Generate an extra picture async for variety, but return the existing one
+      generateAndStorePicture(word, language, deps).catch((err) => {
+        console.error("Error generating extra picture:", err);
+      });
+    }
+    return {
+      picture: existingPicture.picture,
+      contact: existingPicture.contact,
+    };
   }
 
-  return generateAndStorePicture(word, language, deps);
+  const picture = await generateAndStorePicture(word, language, deps);
+  return { picture, contact: null };
 }

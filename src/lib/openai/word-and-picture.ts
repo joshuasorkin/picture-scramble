@@ -1,5 +1,6 @@
 import { generateWord, getRandomWord } from "./generate-word";
 import { generatePicture, type PictureDeps } from "./generate-picture";
+import type { Contact } from "@/lib/game/contact-info";
 
 export interface WordAndPictureDeps extends PictureDeps {
   getRandomWordByLanguage: (language: string) => Promise<string | null>;
@@ -9,6 +10,8 @@ export interface WordAndPictureDeps extends PictureDeps {
 export interface WordAndPictureResult {
   word: string;
   picture: string;
+  // Attribution for the chosen image, when it was uploaded by an artist
+  contact: Contact | null;
 }
 
 export async function generateWordAndPictureUntilSuccess(
@@ -22,6 +25,7 @@ export async function generateWordAndPictureUntilSuccess(
   let generateAttempts = 0;
   let word = "";
   let picture = "";
+  let contact: Contact | null = null;
   const wordLengthMax = Number(process.env.WORD_LENGTH_MAX ?? 9);
 
   while (!success) {
@@ -51,7 +55,7 @@ export async function generateWordAndPictureUntilSuccess(
         }
       }
 
-      picture = await generatePicture(word, language, deps);
+      ({ picture, contact } = await generatePicture(word, language, deps));
       success = true;
     } catch (error) {
       const msg = error instanceof Error ? error.message : "";
@@ -61,5 +65,5 @@ export async function generateWordAndPictureUntilSuccess(
     }
   }
 
-  return { word, picture };
+  return { word, picture, contact };
 }

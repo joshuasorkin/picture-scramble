@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, it, expect } from "vitest";
 import "@/../__tests__/helpers/setup";
 import { Game } from "@/lib/db/models/game";
@@ -6,7 +7,9 @@ import { Image } from "@/lib/db/models/image";
 import { getSHA256Hash } from "@/lib/game/hash";
 import { scramblePhrase } from "@/lib/game/scramble";
 import { findMismatches } from "@/lib/game/mismatches";
-import { storeImage } from "@/lib/game/image-store";
+import { createImageStore } from "@/lib/game/image-store";
+import { createMemoryStorage } from "@/../__tests__/helpers/memory-storage";
+import { makePng } from "@/../__tests__/helpers/test-image";
 
 describe("full game flow", () => {
   it("create game → wrong answer → correct answer", async () => {
@@ -49,8 +52,10 @@ describe("image upload flow", () => {
   it("stores and retrieves uploaded image with contact", async () => {
     const word = "sunset";
     const language = "English";
-    const buffer = Buffer.from("fake-png-data");
+    const buffer = await makePng();
     const contact = { name: "Artist", instagram: "artist123" };
+    const { storage } = createMemoryStorage();
+    const { storeImage, findExistingPicture } = createImageStore(storage);
 
     const result = await storeImage(word, null, language, buffer, true, contact);
     expect(result).toBe(true);
@@ -63,8 +68,13 @@ describe("image upload flow", () => {
     // Verify image document
     const imageDoc = await Image.findById(wordDoc!.imageRef);
     expect(imageDoc).toBeDefined();
-    expect(imageDoc!.images).toHaveLength(1);
-    expect(imageDoc!.uploadedIndexes).toHaveLength(1);
-    expect(imageDoc!.uploadedIndexes[0]!.contact).toEqual(contact);
+    expect(imageDoc!.objects).toHaveLength(1);
+    expect(imageDoc!.objects[0]!.uploaded).toBe(true);
+    expect(imageDoc!.objects[0]!.contact).toEqual(contact);
+
+    // Verify retrieval
+    const existing = await findExistingPicture(word);
+    expect(existing!.picture).toBe(storage.publicUrl(imageDoc!.objects[0]!.key));
+    expect(existing!.contact).toEqual(contact);
   });
 });

@@ -8,7 +8,8 @@ import { getSHA256Hash } from "@/lib/game/hash";
 import { getDefaultContact } from "@/lib/game/contact-info";
 import { Game } from "@/lib/db/models/game";
 import { getRandomWordByLanguage, wordGeneratedToday } from "@/lib/game/word-queries";
-import { findExistingPicture, storeImage } from "@/lib/game/image-store";
+import { createImageStore } from "@/lib/game/image-store";
+import { getImageStorage } from "@/lib/storage/r2";
 
 const querySchema = z.object({
   topic: z.string().optional(),
@@ -33,8 +34,7 @@ export async function GET(request: NextRequest) {
     const deps = {
       getRandomWordByLanguage,
       wordGeneratedToday,
-      findExistingPicture,
-      storeImage,
+      ...createImageStore(getImageStorage()),
     };
 
     const wordAndPicture = await generateWordAndPictureUntilSuccess(
@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
     const compliment = await generateCompliment(word, language);
     const scramble = scramblePhrase(word);
     const solutionHash = getSHA256Hash(word);
-    const contact = getDefaultContact();
+    const contact = wordAndPicture.contact ?? getDefaultContact();
 
     const newGame = new Game({
       language,

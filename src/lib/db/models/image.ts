@@ -1,23 +1,33 @@
 import mongoose, { type Document, Schema } from "mongoose";
 import type { Contact } from "@/lib/game/contact-info";
 
-export interface UploadedIndex {
-  imageIndex: number;
-  contact: Contact | null;
+export interface ImageObject {
+  key: string;
+  uploaded: boolean;
+  contact?: Contact | null;
+  createdAt: Date;
 }
 
 export interface IImage extends Document {
-  images: Buffer[];
+  objects: ImageObject[];
   wordImageRef?: string;
-  uploadedIndexes: UploadedIndex[];
   wordRef: mongoose.Types.ObjectId;
 }
 
+const imageObjectSchema = new Schema<ImageObject>(
+  {
+    key: { type: String, required: true },
+    uploaded: { type: Boolean, default: false },
+    contact: { type: Schema.Types.Mixed },
+    createdAt: { type: Date, required: true },
+  },
+  { _id: false }
+);
+
 const imageSchema = new Schema(
   {
-    images: { type: [Buffer], default: [] },
+    objects: { type: [imageObjectSchema], default: [] },
     wordImageRef: { type: String, required: false },
-    uploadedIndexes: { type: [], default: [] },
     wordRef: { type: Schema.Types.ObjectId, ref: "Word" },
   },
   { strict: false }

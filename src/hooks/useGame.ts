@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import type { Contact } from "@/lib/game/contact-info";
 
@@ -35,6 +35,27 @@ export interface GameState {
   defaultContactInfo: string;
 }
 
+const IMAGE_PRELOAD_TIMEOUT_MS = 10000;
+
+// Warm the browser cache so the picture is ready when the game is shown.
+// A failed or slow load still resolves, so it never blocks the game.
+function preloadImage(url: string): Promise<void> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    const timer = setTimeout(resolve, IMAGE_PRELOAD_TIMEOUT_MS);
+    const done = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+    img.onload = done;
+    img.onerror = () => {
+      console.error(`Image failed to load: ${url}`);
+      done();
+    };
+    img.src = url;
+  });
+}
+
 async function sha256Hash(str: string): Promise<string> {
   const data = new TextEncoder().encode(str);
   const hashBuffer = await crypto.subtle.digest("SHA-256", data);
@@ -63,15 +84,7 @@ export function useGame() {
   });
 
   const preloadQueue = useRef<GameData[]>([]);
-  const blobUrlsRef = useRef<string[]>([]);
   const scoreRef = useRef(0);
-
-  // Cleanup blob URLs on unmount
-  useEffect(() => {
-    return () => {
-      blobUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
-    };
-  }, []);
 
   const fetchDefaultContact = useCallback(async () => {
     try {
@@ -82,51 +95,6 @@ export function useGame() {
       // ignore
     }
   }, []);
-
-  const fetchAndCacheImage = useCallback(
-    async (
-      imageUrl: string
-    ): Promise<{ imageBlobUrl: string; contact?: Contact } | null> => {
-      try {
-        const response = await fetch(imageUrl);
-        if (!response.ok) {
-          const body = await response.text().catch(() => "");
-          console.error(
-            `Image fetch failed: ${imageUrl} → ${response.status} ${response.statusText} ${body}`
-          );
-          return null;
-        }
-
-        const contentType = response.headers.get("content-type");
-        if (contentType && contentType.includes("application/json")) {
-          const jsonData = await response.json();
-          const base64Image = jsonData.image?.split(";base64,").pop();
-          if (!base64Image) {
-            console.error(
-              `Image fetch returned JSON without image field: ${imageUrl}`,
-              jsonData
-            );
-            return null;
-          }
-          const imageBlob = await (
-            await fetch(`data:image/png;base64,${base64Image}`)
-          ).blob();
-          const imageBlobUrl = URL.createObjectURL(imageBlob);
-          blobUrlsRef.current.push(imageBlobUrl);
-          return { imageBlobUrl, contact: jsonData.contact };
-        }
-
-        const imageBlob = await response.blob();
-        const blobUrl = URL.createObjectURL(imageBlob);
-        blobUrlsRef.current.push(blobUrl);
-        return { imageBlobUrl: blobUrl };
-      } catch (err) {
-        console.error(`Image fetch threw: ${imageUrl}`, err);
-        return null;
-      }
-    },
-    []
-  );
 
   const fetchGameData = useCallback(
     async (isPreload = false): Promise<GameData | null> => {
@@ -142,20 +110,7 @@ export function useGame() {
 
         const gameData: GameData = await response.json();
 
-        // Check if internal URL (our API route)
-        if (gameData.picture.startsWith("/api/image/")) {
-          const imageResult = await fetchAndCacheImage(gameData.picture);
-          if (!imageResult) {
-            console.error(
-              `Failed to fetch cached image from ${gameData.picture}`
-            );
-            return null;
-          }
-          gameData.picture = imageResult.imageBlobUrl;
-          if (imageResult.contact) {
-            gameData.contact = imageResult.contact;
-          }
-        }
+        await preloadImage(gameData.picture);
 
         if (isPreload) {
           preloadQueue.current.push(gameData);
@@ -166,7 +121,7 @@ export function useGame() {
         return null;
       }
     },
-    [lang, topic, fetchAndCacheImage]
+    [lang, topic]
   );
 
   const startNewGame = useCallback(async () => {

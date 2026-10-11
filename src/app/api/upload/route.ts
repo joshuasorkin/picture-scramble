@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import sharp from "sharp";
 import { connectToDatabase } from "@/lib/db/connection";
 import { createContact } from "@/lib/game/contact-info";
-import { storeImage } from "@/lib/game/image-store";
+import { createImageStore } from "@/lib/game/image-store";
+import { getImageStorage } from "@/lib/storage/r2";
 
 const MAX_FILE_SIZE_MB = 16;
 
@@ -64,6 +65,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const { storeImage } = createImageStore(getImageStorage());
     const result = await storeImage(word, null, language, buffer, true, contact);
 
     if (result) {

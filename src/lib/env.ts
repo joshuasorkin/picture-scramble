@@ -41,6 +41,13 @@ export const envSchema = z.object({
   // Upload
   UPLOAD_KEY: z.string().default(""),
 
+  // Image storage (Cloudflare R2)
+  R2_ACCOUNT_ID: z.string().default(""),
+  R2_ACCESS_KEY_ID: z.string().default(""),
+  R2_SECRET_ACCESS_KEY: z.string().default(""),
+  R2_BUCKET: z.string().default(""),
+  IMAGE_BASE_URL: z.string().default(""),
+
   // Server
   PORT: z.coerce.number().default(3000),
   BASE_URL: z.string().default("http://localhost:3000"),

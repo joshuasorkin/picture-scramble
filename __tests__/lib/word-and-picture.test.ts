@@ -9,7 +9,10 @@ vi.mock("@/lib/openai/generate-word", () => ({
 }));
 
 vi.mock("@/lib/openai/generate-picture", () => ({
-  generatePicture: vi.fn().mockResolvedValue("http://example.com/pic.png"),
+  generatePicture: vi.fn().mockResolvedValue({
+    picture: "http://example.com/pic.png",
+    contact: null,
+  }),
 }));
 
 describe("generateWordAndPictureUntilSuccess", () => {
@@ -35,6 +38,7 @@ describe("generateWordAndPictureUntilSuccess", () => {
 
     expect(result.word).toBe("hello");
     expect(result.picture).toBe("http://example.com/pic.png");
+    expect(result.contact).toBeNull();
     expect(mockDeps.getRandomWordByLanguage).toHaveBeenCalledWith("English");
   });
 
