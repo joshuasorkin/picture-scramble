@@ -41,6 +41,9 @@ export const envSchema = z.object({
   // Upload
   UPLOAD_KEY: z.string().default(""),
 
+  // Analytics (GET /api/stats is disabled while empty)
+  STATS_KEY: z.string().default(""),
+
   // Image storage (Cloudflare R2)
   R2_ACCOUNT_ID: z.string().default(""),
   R2_ACCESS_KEY_ID: z.string().default(""),

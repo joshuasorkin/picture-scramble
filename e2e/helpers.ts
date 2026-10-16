@@ -66,6 +66,11 @@ export async function mockApiRoutes(page: Page) {
     }
   });
 
+  // Mock analytics endpoint
+  await page.route("**/api/game-event*", (route) => {
+    route.fulfill({ status: 204 });
+  });
+
   // Mock default-contact endpoint
   await page.route("**/api/default-contact*", (route) => {
     route.fulfill({

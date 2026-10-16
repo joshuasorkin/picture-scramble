@@ -10,6 +10,9 @@ export interface IGame extends Document {
   compliment: string;
   date_create: Date;
   date_solve?: Date;
+  date_start?: Date;
+  visitorId?: string;
+  visitId?: string;
   topic?: string;
   contact?: Contact;
 }
@@ -23,9 +26,14 @@ const gameSchema = new Schema<IGame>({
   compliment: { type: String },
   date_create: { type: Date, required: true },
   date_solve: { type: Date },
+  date_start: { type: Date },
+  visitorId: { type: String },
+  visitId: { type: String },
   topic: { type: String },
   contact: { type: Schema.Types.Mixed },
 });
+
+gameSchema.index({ date_start: 1 }, { sparse: true });
 
 export const Game =
   (mongoose.models["Game"] as mongoose.Model<IGame>) ??

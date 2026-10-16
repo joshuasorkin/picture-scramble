@@ -19,6 +19,18 @@ contact?: Contact             # artist/creator attribution
 topic?: string                # optional theme constraint
 date_create: Date
 date_solve?: Date             # set when player solves the puzzle
+date_start?: Date             # set when the game is first shown to a player (unset for unshown preloads)
+visitorId?: string            # anonymous visitor (vid cookie) the game was shown to
+visitId?: string              # -> Visit the game was shown in
+```
+
+### Visit
+```
+visitorId: string             # anonymous visitor (vid cookie)
+startedAt: Date
+lastSeenAt: Date              # extended by every event; 30 min idle ends the visit
+referrer?: string             # referring site's hostname (other sites only)
+utmSource?: string            # ?utm_source= on the landing URL
 ```
 
 ### Word
@@ -89,6 +101,15 @@ Image.objects[].contact ---> Contact (embedded)
 4. Manual submit: `GET /api/check-game?gameId=X&playerSolution=Y`
    - Correct: sets `date_solve`, returns compliment, score increments by `puzzleValue`
    - Incorrect: returns `mismatches[]` (indices of wrong characters), `puzzleValue` decrements
+
+### Analytics Flow
+1. On page load the client sends `POST /api/game-event {type:"visit", referrer, utmSource}` (once per page load); later events wait for it so a new visitor's cookie is set first
+2. Server reads the `vid` cookie (random UUID; created and set on first event, 1 year) and calls `touchVisit()`: extends the visitor's visit if active in the last 30 minutes, otherwise creates a new Visit
+3. When a game is shown, client sends `{type:"start", gameId}`; server touches the visit and sets `date_start`, `visitorId`, `visitId` on the game (first event only)
+4. On an auto-submit solve the client sends `{type:"solve", gameId, solution}`; the server sets `date_solve` only if the solution matches
+5. `getStats(from, to, tz)` unions visits and started games, buckets them by local day, and returns per-day and whole-range visitors, visits, rounds, solves and per-visitor averages. Whole-range visitors are deduplicated, so they are not the sum of the days
+6. Viewed at `/stats?key=STATS_KEY` (dashboard; 404 without the key) or `GET /api/stats?key=…&from=&to=&tz=` (JSON). Defaults: last 14 days, America/Los_Angeles
+- A **round** is a game that was shown, not a game that was created: preloads that are never shown have no `date_start`
 
 ### Pull-to-Submit Gesture
 1. Player drags entire tile rack upward toward image
@@ -166,6 +187,7 @@ Image.objects[].contact ---> Contact (embedded)
 | `games`     | Game instances              |
 | `words`     | Vocabulary index            |
 | `images`    | Image keys and metadata (bytes are in R2) |
+| `visits`    | Visitor sessions for analytics |
 
 **Access patterns:**
 - Games created on each `/api/new-game` call; `date_solve` updated on correct answer
@@ -185,6 +207,8 @@ Image.objects[].contact ---> Contact (embedded)
 ### Auth & Security
 - No user authentication (anonymous play)
 - Upload endpoint protected by `UPLOAD_KEY` env var
+- Stats endpoint and page protected by `STATS_KEY` env var (disabled while unset)
+- Visitors are identified only by a random first-party cookie; no IPs or personal data stored
 - Solution never sent to client (hash-only verification)
 - Zod validation on all API inputs and env vars
 
@@ -198,12 +222,39 @@ Image.objects[].contact ---> Contact (embedded)
 | GET    | `/api/check-game`   | Verify player's answer           |
 | POST   | `/api/upload`       | Accept user-submitted images     |
 | GET    | `/api/default-contact` | Fetch default artist contact  |
+| POST   | `/api/game-event`   | Record visit / round start / client-side solve |
+| GET    | `/api/stats`        | Visitor/visit/round stats as JSON (needs `STATS_KEY`) |
+| GET    | `/stats`            | Stats dashboard page (needs `STATS_KEY`) |
 
 ---
 
+## Growth KPIs
+
+The product goal is more active users: bring new players in, keep them past the first visit, and bring them back. These KPIs measure that goal. They are built **one per agent session**: build the first `planned` KPI in table order, then set its status to `done`. The order puts KPIs that need no new tracking first; KPI 9 is the existing baseline.
+
+**Conventions for every KPI**
+- Computed in `src/lib/analytics/` against MongoDB, with integration tests (mongodb-memory-server) like `stats.ts`
+- Shown on the `/stats` dashboard and returned by `GET /api/stats`, using the dashboard's date range and timezone
+- Days are local calendar days in the selected timezone; a visitor is a `vid` cookie, a visit is a `Visit`, a round is a game with `date_start`
+- New client tracking goes through `POST /api/game-event`: fire-and-forget, never affects the game, and no personal data (no IPs, no fingerprinting; see Auth & Security)
+- A visitor's **first day** is the local day of their earliest `Visit.startedAt`, over all time, not only the selected range
+
+| # | KPI | Definition | Data | Status |
+|---|-----|------------|------|--------|
+| 1 | Return rate (D1 / D7 / D30) | Of visitors whose first day is D, the share with any visit on day D+1, within D+1..D+7, and within D+1..D+30. Shown as cohort rows by first day; a cohort's figure stays blank until its window has fully passed | Existing `visits` | planned |
+| 2 | New vs. returning visitors | Per day: visitors whose first day is that day vs. all other visitors that day | Existing `visits` | planned |
+| 3 | Bounce rate and time to first puzzle | Bounce rate: share of visits with no round. Time to first puzzle: time from a visit's start to its first round's `date_start` (median and p90) | Existing for bounce rate; time to first puzzle needs a first-round marker per visit, or the client to report load time | planned |
+| 4 | First-visit funnel | For visitors on their first visit: share reaching each step: landed, 1st puzzle shown, 1st solve, 2nd puzzle, 5th puzzle | Rounds and solves per visit (`Game.visitId`); landed = `Visit` exists | planned |
+| 5 | Acquisition by source | Visitors, new visitors and return rate (KPI 1) grouped by `utmSource`, falling back to `referrer`, then "direct" | `Visit.referrer` and `Visit.utmSource` (already recorded) | planned |
+| 6 | Skip and solve rate by difficulty | Per word length and language: share of rounds solved, share skipped (started, not solved, followed by another round in the same visit) and median time to solve (`date_solve - date_start`) | Mostly existing; skips may need an explicit `skip` event | planned |
+| 7 | Sharing | Shares per day and visits arriving from a share. Needs a share button first (e.g. "share my score" with `?utm_source=share`) | New share event and share feature | planned |
+| 8 | Mobile vs. desktop | KPIs 1, 3 and 9 split by device class | New: device class (mobile/tablet/desktop, from user agent) on `Visit` | planned |
+| 9 | Daily activity (baseline) | Unique visitors, visits / visitor, puzzles played / visitor, puzzles solved / visitor, per day and for the range | Existing | done |
+
 ## Next Tasks
 
+0. Build the next `planned` Growth KPI (one per session; see Growth KPIs)
 1. Add language-specific wordlist support (beyond English)
-2. Track game analytics (solve time, attempts, score distribution)
+2. Extend game analytics (solve time, attempts, score distribution); visitors, visits, rounds and solves are done
 3. Implement difficulty scaling based on player performance
 4. Add ARIA labels and keyboard navigation for accessibility

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import type { Contact } from "@/lib/game/contact-info";
 
@@ -56,6 +56,37 @@ function preloadImage(url: string): Promise<void> {
   });
 }
 
+function postGameEvent(event: Record<string, string>): Promise<void> {
+  return fetch("/api/game-event", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(event),
+    keepalive: true,
+  }).then(
+    () => {},
+    () => {}
+  );
+}
+
+// One visit event per page load (module-level so a remount doesn't resend).
+// Later events wait for it, so a first-time visitor's cookie is set before
+// any other event and all of them share one visitor id.
+let visitSent: Promise<void> | null = null;
+
+function sendVisitEvent(): Promise<void> {
+  visitSent ??= postGameEvent({
+    type: "visit",
+    referrer: document.referrer,
+    utmSource: new URLSearchParams(window.location.search).get("utm_source") ?? "",
+  });
+  return visitSent;
+}
+
+// Fire-and-forget analytics event; failures never affect the game.
+function sendGameEvent(event: Record<string, string>): void {
+  sendVisitEvent().then(() => postGameEvent(event));
+}
+
 async function sha256Hash(str: string): Promise<string> {
   const data = new TextEncoder().encode(str);
   const hashBuffer = await crypto.subtle.digest("SHA-256", data);
@@ -82,6 +113,10 @@ export function useGame() {
     errorMessage: "",
     defaultContactInfo: "",
   });
+
+  useEffect(() => {
+    sendVisitEvent();
+  }, []);
 
   const preloadQueue = useRef<GameData[]>([]);
   const scoreRef = useRef(0);
@@ -165,6 +200,7 @@ export function useGame() {
       compliment: gameData!.compliment,
       contact: gameData!.contact,
     }));
+    sendGameEvent({ type: "start", gameId: gameData.gameId });
 
     // Preload next games
     fetchGameData(true);
@@ -177,6 +213,7 @@ export function useGame() {
 
       if (isAutoSubmit) {
         // Hash already matched client-side
+        sendGameEvent({ type: "solve", gameId: state.gameId, solution: userInput });
         setState((s) => {
           const newScore = s.score + s.puzzleValue;
           scoreRef.current = newScore;
