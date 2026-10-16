@@ -1,5 +1,10 @@
+# fly.toml app configuration file generated for picture-scramble on 2026-04-05T15:08:39-07:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
 app = 'picture-scramble'
-primary_region = 'iad'
+primary_region = 'sjc'
 
 [build]
 
@@ -12,6 +17,7 @@ primary_region = 'iad'
   processes = ['app']
 
 [[vm]]
-  memory = '512mb'
+  memory = '1gb'
   cpu_kind = 'shared'
   cpus = 1
+  memory_mb = 1024
