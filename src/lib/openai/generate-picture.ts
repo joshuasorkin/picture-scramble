@@ -21,8 +21,10 @@ export interface PictureDeps {
     language: string,
     buffer?: Buffer | null,
     uploaded?: boolean
-  ) => Promise<boolean>;
+  ) => Promise<string | null>;
 }
+
+const IMAGE_MODEL = "gpt-image-2.5-flare";
 
 export async function generateAndStorePicture(
   word: string,
@@ -32,21 +34,29 @@ export async function generateAndStorePicture(
   const client = getOpenAIClient();
 
   const response = await client.images.generate({
-    model: "dall-e-3",
+    model: IMAGE_MODEL,
     prompt: `Generate a picture of ${word}, in a random historical art style. Do not include the word '${word}' in the picture. Do not include any text in the picture.`,
     n: 1,
     size: "1024x1024",
+    quality: "medium",
+    output_format: "webp",
   });
 
-  const picture = response.data?.[0]?.url;
-  if (!picture) {
-    throw new Error("No image URL in DALL-E response");
+  // GPT Image models return the image data, not a URL
+  const b64 = response.data?.[0]?.b64_json;
+  if (!b64) {
+    throw new Error("No image data in image generation response");
   }
 
-  // Store asynchronously — don't block the response
-  deps.storeImage(word, picture, language).catch((err) => {
-    console.error("Error storing image:", err);
-  });
+  const picture = await deps.storeImage(
+    word,
+    null,
+    language,
+    Buffer.from(b64, "base64")
+  );
+  if (!picture) {
+    throw new Error(`Failed to store generated image for '${word}'`);
+  }
 
   return picture;
 }

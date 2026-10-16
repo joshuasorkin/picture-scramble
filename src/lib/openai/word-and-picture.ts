@@ -14,6 +14,11 @@ export interface WordAndPictureResult {
   contact: Contact | null;
 }
 
+// Unexpected errors (e.g. OpenAI failures) before giving up
+export const MAX_FAILURES = 3;
+// All attempts, including routine retries for repeated or too-long words
+export const MAX_ATTEMPTS = 20;
+
 export async function generateWordAndPictureUntilSuccess(
   topicParam: string | null,
   score: number,
@@ -23,12 +28,15 @@ export async function generateWordAndPictureUntilSuccess(
   let success = false;
   let alreadyShownToday = false;
   let generateAttempts = 0;
+  let attempts = 0;
+  let failures = 0;
   let word = "";
   let picture = "";
   let contact: Contact | null = null;
   const wordLengthMax = Number(process.env.WORD_LENGTH_MAX ?? 9);
 
   while (!success) {
+    attempts++;
     try {
       if (alreadyShownToday && generateAttempts > 3) {
         word = getRandomWord();
@@ -61,6 +69,13 @@ export async function generateWordAndPictureUntilSuccess(
       const msg = error instanceof Error ? error.message : "";
       if (msg !== "already shown today" && msg !== "word too long") {
         console.error("Error generating word and picture:", error);
+        failures++;
+      }
+      if (failures >= MAX_FAILURES || attempts >= MAX_ATTEMPTS) {
+        throw new Error(
+          `Gave up generating a word and picture after ${attempts} attempts`,
+          { cause: error }
+        );
       }
     }
   }

@@ -11,21 +11,41 @@ vi.mock("@/lib/openai/client", () => ({
 describe("generatePicture", () => {
   const deps = {
     findExistingPicture: vi.fn(),
-    storeImage: vi.fn().mockResolvedValue(true),
+    storeImage: vi.fn(),
   };
+  const imageData = Buffer.from("generated image");
 
   beforeEach(() => {
     vi.clearAllMocks();
-    generate.mockResolvedValue({ data: [{ url: "http://dalle.test/new.png" }] });
+    generate.mockResolvedValue({ data: [{ b64_json: imageData.toString("base64") }] });
+    deps.storeImage.mockResolvedValue("https://img.test/img/new.webp");
   });
 
-  it("generates and stores a picture for a new word", async () => {
+  it("generates and stores a picture for a new word, returning its stored URL", async () => {
     deps.findExistingPicture.mockResolvedValue(null);
 
     const result = await generatePicture("apple", "English", deps);
 
-    expect(result).toEqual({ picture: "http://dalle.test/new.png", contact: null });
-    expect(deps.storeImage).toHaveBeenCalledWith("apple", "http://dalle.test/new.png", "English");
+    expect(result).toEqual({ picture: "https://img.test/img/new.webp", contact: null });
+    expect(generate).toHaveBeenCalledWith(
+      expect.objectContaining({ model: "gpt-image-2.5-flare", quality: "medium" })
+    );
+    expect(deps.storeImage).toHaveBeenCalledWith("apple", null, "English", imageData);
+  });
+
+  it("throws when the generated picture cannot be stored", async () => {
+    deps.findExistingPicture.mockResolvedValue(null);
+    deps.storeImage.mockResolvedValue(null);
+
+    await expect(generatePicture("apple", "English", deps)).rejects.toThrow(/store/);
+  });
+
+  it("throws when the response has no image data", async () => {
+    deps.findExistingPicture.mockResolvedValue(null);
+    generate.mockResolvedValue({ data: [{}] });
+
+    await expect(generatePicture("apple", "English", deps)).rejects.toThrow(/image data/);
+    expect(deps.storeImage).not.toHaveBeenCalled();
   });
 
   it("returns the existing picture and generates an extra one while there is room", async () => {

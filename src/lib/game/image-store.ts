@@ -22,7 +22,8 @@ export function createImageStore(storage: ImageStorage) {
     buffer: Buffer | null = null,
     uploaded = false,
     contact: Contact | null = null
-  ): Promise<boolean> {
+  ): Promise<string | null> {
+    // Returns the stored image's public URL, or null if nothing was stored
     try {
       let imageBuffer: Buffer;
 
@@ -58,7 +59,7 @@ export function createImageStore(storage: ImageStorage) {
       if (imageDoc.objects.length >= MAX_IMAGES_PER_WORD) {
         if (!uploaded) {
           // Word is full — only uploads displace existing images
-          return false;
+          return null;
         }
         // Remove the oldest non-uploaded image to make room
         let removedIndex = imageDoc.objects.findIndex((o) => !o.uploaded);
@@ -94,10 +95,10 @@ export function createImageStore(storage: ImageStorage) {
         });
       }
 
-      return true;
+      return storage.publicUrl(key);
     } catch (err) {
       console.error("Error storing image:", err);
-      return false;
+      return null;
     }
   }
 

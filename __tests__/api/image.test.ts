@@ -19,7 +19,6 @@ describe("image store", () => {
 
   it("stores an image as WebP under a content-hash key", async () => {
     const result = await store.storeImage("test", null, "English", await makePng());
-    expect(result).toBe(true);
 
     const wordDoc = await Word.findOne({ word: "test" });
     const imageDoc = await Image.findById(wordDoc!.imageRef);
@@ -28,6 +27,8 @@ describe("image store", () => {
     const { key, uploaded } = imageDoc!.objects[0]!;
     expect(key).toMatch(/^img\/[0-9a-f]{64}\.webp$/);
     expect(uploaded).toBe(false);
+
+    expect(result).toBe(memory.storage.publicUrl(key));
 
     const stored = memory.objects.get(key);
     expect(stored!.contentType).toBe("image/webp");
@@ -73,12 +74,12 @@ describe("image store", () => {
 
   it("refuses generated images once a word is full", async () => {
     for (let i = 0; i < MAX_IMAGES_PER_WORD; i++) {
-      expect(await store.storeImage("test", null, "English", await makePng(i))).toBe(true);
+      expect(await store.storeImage("test", null, "English", await makePng(i))).not.toBeNull();
     }
     expect((await store.findExistingPicture("test"))!.full).toBe(true);
 
     const result = await store.storeImage("test", null, "English", await makePng(99));
-    expect(result).toBe(false);
+    expect(result).toBeNull();
 
     const imageDoc = await Image.findOne({});
     expect(imageDoc!.objects).toHaveLength(MAX_IMAGES_PER_WORD);
@@ -96,7 +97,7 @@ describe("image store", () => {
     const result = await store.storeImage(
       "test", null, "English", await makePng(99), true, { name: "Second" }
     );
-    expect(result).toBe(true);
+    expect(result).not.toBeNull();
 
     const after = await Image.findOne({});
     expect(after!.objects).toHaveLength(MAX_IMAGES_PER_WORD);

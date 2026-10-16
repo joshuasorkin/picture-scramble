@@ -4,14 +4,14 @@
 Before starting any task, read `architecture.md` in the project root. It is the architectural source of truth — containing core data models, essential flows, architectural decisions, and constraints that all code must respect. Update it when making meaningful architectural changes.
 
 ## Project Overview
-AI-generated word scramble game ("Utu's Wild Words"). Players unscramble words by dragging SVG tiles, with DALL-E generated art as clues.
+AI-generated word scramble game ("Utu's Wild Words"). Players unscramble words by dragging SVG tiles, with AI-generated art as clues.
 
 ## Architecture
 - **Framework:** Next.js 15 with App Router, TypeScript strict mode
 - **Database:** MongoDB via Mongoose (singleton connection cached on globalThis)
-- **AI:** OpenAI GPT-3.5-turbo (words/compliments) + DALL-E 3 (images)
+- **AI:** OpenAI GPT-3.5-turbo (words/compliments) + gpt-image-2.5-flare (images)
 - **Styling:** Tailwind CSS + custom CSS animations
-- **Deployment:** Fly.io via Docker (persistent server for slow DALL-E calls)
+- **Deployment:** Fly.io via Docker (persistent server for slow image generation calls)
 
 ## Key Patterns
 - **API:** Route Handlers in `src/app/api/` (GET/POST with Web Request API)

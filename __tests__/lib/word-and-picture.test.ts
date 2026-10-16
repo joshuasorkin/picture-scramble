@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { generateWordAndPictureUntilSuccess } from "@/lib/openai/word-and-picture";
+import {
+  generateWordAndPictureUntilSuccess,
+  MAX_ATTEMPTS,
+  MAX_FAILURES,
+} from "@/lib/openai/word-and-picture";
+import { generatePicture } from "@/lib/openai/generate-picture";
 
 // Mock the OpenAI modules
 vi.mock("@/lib/openai/generate-word", () => ({
@@ -26,6 +31,10 @@ describe("generateWordAndPictureUntilSuccess", () => {
   beforeEach(() => {
     vi.stubEnv("WORD_LENGTH_MAX", "9");
     vi.clearAllMocks();
+    vi.mocked(generatePicture).mockResolvedValue({
+      picture: "http://example.com/pic.png",
+      contact: null,
+    });
   });
 
   it("uses existing word from language when available", async () => {
@@ -70,5 +79,25 @@ describe("generateWordAndPictureUntilSuccess", () => {
     );
 
     expect(result.word).toBe("grape");
+  });
+
+  it("gives up after repeated picture failures instead of retrying forever", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(generatePicture).mockRejectedValue(new Error("model does not exist"));
+
+    await expect(
+      generateWordAndPictureUntilSuccess("animals", 0, "English", mockDeps)
+    ).rejects.toThrow(/Gave up/);
+    expect(generatePicture).toHaveBeenCalledTimes(MAX_FAILURES);
+  });
+
+  it("gives up after too many routine retries", async () => {
+    mockDeps.getRandomWordByLanguage.mockResolvedValue("extraordinarily");
+    mockDeps.wordGeneratedToday.mockResolvedValue(false);
+
+    await expect(
+      generateWordAndPictureUntilSuccess(null, 0, "English", mockDeps)
+    ).rejects.toThrow(/Gave up/);
+    expect(mockDeps.getRandomWordByLanguage).toHaveBeenCalledTimes(MAX_ATTEMPTS);
   });
 });

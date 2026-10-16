@@ -58,7 +58,7 @@ describe("image upload flow", () => {
     const { storeImage, findExistingPicture } = createImageStore(storage);
 
     const result = await storeImage(word, null, language, buffer, true, contact);
-    expect(result).toBe(true);
+    expect(result).not.toBeNull();
 
     // Verify word document
     const wordDoc = await Word.findOne({ word, language });

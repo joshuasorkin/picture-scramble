@@ -13,7 +13,7 @@ language: string
 solution: string              # correct answer (plaintext, server-only)
 solutionHash: string          # SHA-256 hash sent to client for verification
 scramble: string              # Fisher-Yates shuffled word
-picture: string               # DALL-E URL (new word) or R2 image URL
+picture: string               # R2 image URL
 compliment: string            # AI-generated congratulations message
 contact?: Contact             # artist/creator attribution
 topic?: string                # optional theme constraint
@@ -85,9 +85,11 @@ Image.objects[].contact ---> Contact (embedded)
 2. Server connects to MongoDB (singleton cached connection)
 3. `generateWordAndPictureUntilSuccess()` finds or generates a word + image
    - Checks DB for existing word not shown today
-   - For a word with stored images, `pickImage()` chooses one (uploads first) and its R2 URL is returned; an extra DALL-E image is generated in the background unless the word is full
+   - For a word with stored images, `pickImage()` chooses one (uploads first) and its R2 URL is returned; an extra generated image is made in the background unless the word is full
+   - Otherwise generates a new image, stores it in R2 and returns its R2 URL
    - Falls back to OpenAI generation with retry loop
-   - After 3 failures, picks random word from local wordlist
+   - After 3 repeats of words shown today, picks random word from local wordlist
+   - Gives up and returns 500 after 3 unexpected errors (e.g. OpenAI failures) or 20 attempts in total, so a broken image model can't make a request spin
 4. `generateCompliment()` via GPT-3.5-turbo
 5. `scramblePhrase()` shuffles the word (Fisher-Yates)
 6. `getSHA256Hash()` creates client-verifiable hash
@@ -163,7 +165,7 @@ Image.objects[].contact ---> Contact (embedded)
 - Images are converted to WebP (quality 85) before upload
 - Keys are content hashes, so image URLs are immutable, cacheable forever, and do not reveal the solution
 - `createImageStore(storage)` returns `storeImage()` / `findExistingPicture()`; the `ImageStorage` interface (`src/lib/storage/r2.ts`) is injected so tests use an in-memory fake
-- `storeImage()` enforces the per-word cap and eviction
+- `storeImage()` enforces the per-word cap and eviction, and returns the stored image's public URL (or null when nothing was stored)
 - Upload endpoint validates with `UPLOAD_KEY`, normalizes to PNG via sharp
 
 ### Database Connection
@@ -173,7 +175,7 @@ Image.objects[].contact ---> Contact (embedded)
 - Image queries select only `objects` and `wordRef`, so legacy buffer fields are never loaded
 
 ### Deployment
-- Fly.io via Docker (not serverless) — DALL-E generation too slow for cold starts
+- Fly.io via Docker (not serverless) — image generation too slow for cold starts
 - Persistent server handles long-running AI calls gracefully
 
 ---
@@ -200,7 +202,7 @@ Image.objects[].contact ---> Contact (embedded)
 
 ### OpenAI
 - **GPT-3.5-turbo:** word generation, compliment generation
-- **DALL-E 3:** image generation for new words
+- **`gpt-image-2.5-flare`:** image generation for new words (1024×1024, medium quality, WebP; about $0.013 and 10–13 s per image in October 2026). It returns image data rather than a URL, so images are stored in R2 before being served. DALL-E 3 was shut down by OpenAI on 12 May 2026
 - Prompts stored in environment variables with `topic` and `language` placeholders
 - Configurable timeouts and retry counts via env vars
 
@@ -252,6 +254,9 @@ The product goal is more active users: bring new players in, keep them past the 
 | 9 | Daily activity (baseline) | Unique visitors, visits / visitor, puzzles played / visitor, puzzles solved / visitor, per day and for the range | Existing | done |
 
 ## Next Tasks
+
+**Priority:**
+- **B. "Share this puzzle" link.** After solving, the player can share a link that opens the exact puzzle they solved, with Wordle-style text (e.g. "Solved in 14s, can you beat me?") and `?utm_source=share`. No uploads. This feeds Growth KPI 7 (Sharing). Later, depending on share data: let players type a word for a friend and generate the picture (no photo uploads); user photo uploads come last, if ever, because of moderation.
 
 0. Build the next `planned` Growth KPI (one per session; see Growth KPIs)
 1. Add language-specific wordlist support (beyond English)
