@@ -7,7 +7,12 @@ import { scramblePhrase } from "@/lib/game/scramble";
 import { getSHA256Hash } from "@/lib/game/hash";
 import { getDefaultContact } from "@/lib/game/contact-info";
 import { Game } from "@/lib/db/models/game";
-import { getRandomWordByLanguage, wordGeneratedToday } from "@/lib/game/word-queries";
+import {
+  claimTopicWord,
+  getRandomWordByLanguage,
+  recentTopicWords,
+  wordGeneratedToday,
+} from "@/lib/game/word-queries";
 import { createImageStore } from "@/lib/game/image-store";
 import { getImageStorage } from "@/lib/storage/r2";
 import { getRandomSavedArtStyle, saveArtStyle } from "@/lib/game/art-style-queries";
@@ -38,6 +43,8 @@ export async function GET(request: NextRequest) {
     const deps = {
       getRandomWordByLanguage,
       wordGeneratedToday,
+      recentTopicWords,
+      claimTopicWord,
       saveArtStyle,
       getRandomSavedArtStyle,
       ...createImageStore(getImageStorage()),

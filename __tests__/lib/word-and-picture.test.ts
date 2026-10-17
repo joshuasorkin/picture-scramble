@@ -5,6 +5,7 @@ import {
   MAX_FAILURES,
 } from "@/lib/openai/word-and-picture";
 import { generatePicture } from "@/lib/openai/generate-picture";
+import { generateWord } from "@/lib/openai/generate-word";
 
 // Mock the OpenAI modules
 vi.mock("@/lib/openai/generate-word", () => ({
@@ -24,6 +25,8 @@ describe("generateWordAndPictureUntilSuccess", () => {
   const mockDeps = {
     getRandomWordByLanguage: vi.fn(),
     wordGeneratedToday: vi.fn(),
+    recentTopicWords: vi.fn(),
+    claimTopicWord: vi.fn(),
     findExistingPicture: vi.fn(),
     storeImage: vi.fn(),
     saveArtStyle: vi.fn(),
@@ -90,6 +93,44 @@ describe("generateWordAndPictureUntilSuccess", () => {
     );
 
     expect(result.word).toBe("grape");
+  });
+
+  it("asks for a topic word that avoids words recently played on the topic", async () => {
+    mockDeps.recentTopicWords.mockResolvedValue(["routing", "guardrail"]);
+
+    const result = await generateWordAndPictureUntilSuccess(
+      "agentic engineering", 0, "English", mockDeps
+    );
+
+    expect(result.word).toBe("apple");
+    expect(mockDeps.recentTopicWords).toHaveBeenCalledWith("agentic engineering", "English");
+    expect(generateWord).toHaveBeenCalledWith(
+      "agentic engineering", 0, "English", ["routing", "guardrail"], expect.any(Function)
+    );
+  });
+
+  it("claims the topic word through the deps", async () => {
+    mockDeps.recentTopicWords.mockResolvedValue([]);
+    mockDeps.claimTopicWord.mockResolvedValue(true);
+
+    await generateWordAndPictureUntilSuccess("agents", 0, "English", mockDeps);
+
+    const claim = vi.mocked(generateWord).mock.calls[0]![4]!;
+    expect(await claim("routing")).toBe(true);
+    expect(mockDeps.claimTopicWord).toHaveBeenCalledWith("agents", "English", "routing");
+  });
+
+  it("looks up recent topic words only once across retries", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    mockDeps.recentTopicWords.mockResolvedValue([]);
+    vi.mocked(generatePicture)
+      .mockRejectedValueOnce(new Error("flaky"))
+      .mockResolvedValueOnce({ picture: "http://example.com/pic.png", contact: null });
+
+    await generateWordAndPictureUntilSuccess("animals", 0, "English", mockDeps);
+
+    expect(generateWord).toHaveBeenCalledTimes(2);
+    expect(mockDeps.recentTopicWords).toHaveBeenCalledTimes(1);
   });
 
   it("gives up after repeated picture failures instead of retrying forever", async () => {

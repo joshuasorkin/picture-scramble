@@ -25,12 +25,14 @@ export function getRandomWord(wordList?: string[]): string {
 
 /**
  * Pick a random word from a comma- or newline-separated model response,
- * keeping only single words of 4 to maxLength letters.
+ * keeping only single words of 4 to maxLength letters. Words in `avoid` are
+ * skipped unless every usable word is in it, so a small topic still plays.
  */
 export function pickWord(
   response: string,
   maxLength: number,
-  random: () => number = Math.random
+  random: () => number = Math.random,
+  avoid: string[] = []
 ): string | null {
   const candidates = response
     .split(/[,\n]/)
@@ -40,7 +42,10 @@ export function pickWord(
   if (candidates.length === 0) {
     return null;
   }
-  return candidates[Math.floor(random() * candidates.length)]!;
+  const avoided = new Set(avoid.map((w) => w.toLowerCase()));
+  const fresh = candidates.filter((w) => !avoided.has(w));
+  const pool = fresh.length > 0 ? fresh : candidates;
+  return pool[Math.floor(random() * pool.length)]!;
 }
 
 /**
@@ -60,7 +65,12 @@ export function chance(score: number): boolean {
 export async function generateWord(
   topicParam: string | null,
   score = 0,
-  language: string
+  language: string,
+  // Recent words to steer away from, e.g. ones already played on this topic
+  avoid: string[] = [],
+  // Reserves the picked word; false means another game just took it, so pick
+  // again from the same reply
+  claim?: (word: string) => Promise<boolean>
 ): Promise<string> {
   let prompt: string;
 
@@ -80,19 +90,29 @@ export async function generateWord(
     );
   }
 
+  const avoidSuffix =
+    avoid.length > 0 ? ` Do not include any of these words: ${avoid.join(", ")}.` : "";
+
   const client = getOpenAIClient();
   const response = await client.chat.completions.create({
     model: CHAT_MODEL,
-    messages: [{ role: "user", content: prompt + WORD_LIST_SUFFIX }],
+    messages: [{ role: "user", content: prompt + WORD_LIST_SUFFIX + avoidSuffix }],
     max_completion_tokens: 200,
     reasoning_effort: "none",
   });
 
   const wordLengthMax = Number(process.env.WORD_LENGTH_MAX ?? 9);
-  const word = pickWord(response.choices[0]?.message?.content ?? "", wordLengthMax);
-  if (!word) {
-    throw new Error("No usable word in OpenAI response");
+  const content = response.choices[0]?.message?.content ?? "";
+  const taken = [...avoid];
+  for (;;) {
+    const word = pickWord(content, wordLengthMax, Math.random, taken);
+    if (!word) {
+      throw new Error("No usable word in OpenAI response");
+    }
+    // A word that was already taken means every usable word is, so reuse it
+    if (!claim || taken.includes(word) || (await claim(word))) {
+      return word;
+    }
+    taken.push(word);
   }
-
-  return word;
 }

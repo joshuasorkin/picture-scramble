@@ -5,6 +5,8 @@ import type { Contact } from "@/lib/game/contact-info";
 export interface WordAndPictureDeps extends PictureDeps {
   getRandomWordByLanguage: (language: string) => Promise<string | null>;
   wordGeneratedToday: (word: string) => Promise<boolean>;
+  recentTopicWords: (topic: string, language: string) => Promise<string[]>;
+  claimTopicWord: (topic: string, language: string, word: string) => Promise<boolean>;
 }
 
 export interface WordAndPictureResult {
@@ -34,6 +36,8 @@ export async function generateWordAndPictureUntilSuccess(
   let word = "";
   let picture = "";
   let contact: Contact | null = null;
+  // Words already played on this topic, fetched once on the first topic attempt
+  let topicWordsToAvoid: string[] | null = null;
   const wordLengthMax = Number(process.env.WORD_LENGTH_MAX ?? 9);
 
   while (!success) {
@@ -42,8 +46,14 @@ export async function generateWordAndPictureUntilSuccess(
       if (alreadyShownToday && generateAttempts > 3) {
         word = getRandomWord();
       } else if (topicParam) {
-        // Topic specified — always generate a fresh word from OpenAI
-        word = await generateWord(topicParam, score, language);
+        // Topic specified — generate a fresh word from OpenAI, steering away
+        // from words recently played on this topic, and claim it right away
+        // so games being made at the same time don't pick it too
+        const topic = topicParam;
+        topicWordsToAvoid ??= await deps.recentTopicWords(topic, language);
+        word = await generateWord(topic, score, language, topicWordsToAvoid, (w) =>
+          deps.claimTopicWord(topic, language, w)
+        );
       } else {
         // No topic — try to find an existing word in this language
         const existingWord = await deps.getRandomWordByLanguage(language);

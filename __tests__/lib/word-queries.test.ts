@@ -2,8 +2,11 @@ import { describe, it, expect } from "vitest";
 import "@/../__tests__/helpers/setup";
 import { Word } from "@/lib/db/models/word";
 import { Game } from "@/lib/db/models/game";
+import { TopicWord } from "@/lib/db/models/topic-word";
 import {
+  claimTopicWord,
   getRandomWordByLanguage,
+  recentTopicWords,
   wordGeneratedToday,
 } from "@/lib/game/word-queries";
 
@@ -64,5 +67,44 @@ describe("wordGeneratedToday", () => {
 
     const result = await wordGeneratedToday("hello");
     expect(result).toBe(false);
+  });
+});
+
+describe("recentTopicWords", () => {
+  const claimed = (word: string, overrides: Record<string, unknown> = {}) =>
+    TopicWord.create({ topic: "agents", language: "English", word, ...overrides });
+
+  it("returns words claimed for the topic and language, newest first", async () => {
+    const now = Date.now();
+    await claimed("routing", { createdAt: new Date(now - 2000) });
+    await claimed("guardrail", { createdAt: new Date(now - 1000) });
+
+    expect(await recentTopicWords("agents", "English")).toEqual(["guardrail", "routing"]);
+  });
+
+  it("ignores other topics, other languages and claims over 24 hours old", async () => {
+    await claimed("planner", { topic: "robots" });
+    await claimed("planeador", { language: "Spanish" });
+    await claimed("toolbox", { createdAt: new Date(Date.now() - 48 * 60 * 60 * 1000) });
+
+    expect(await recentTopicWords("agents", "English")).toEqual([]);
+  });
+});
+
+describe("claimTopicWord", () => {
+  it("claims a word once per topic and language", async () => {
+    expect(await claimTopicWord("agents", "English", "routing")).toBe(true);
+    expect(await claimTopicWord("agents", "English", "routing")).toBe(false);
+    expect(await claimTopicWord("agents", "Spanish", "routing")).toBe(true);
+    expect(await claimTopicWord("robots", "English", "routing")).toBe(true);
+    expect(await recentTopicWords("agents", "English")).toEqual(["routing"]);
+  });
+
+  it("lets only one of several simultaneous claims win", async () => {
+    const results = await Promise.all(
+      Array.from({ length: 6 }, () => claimTopicWord("agents", "English", "routing"))
+    );
+
+    expect(results.filter(Boolean)).toHaveLength(1);
   });
 });

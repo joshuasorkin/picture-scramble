@@ -75,6 +75,15 @@ createdAt: Date
 ```
 - Every new description is saved; the first games a player waits on reuse a random saved one (see New Game Flow)
 
+### TopicWord
+```
+topic: string
+language: string
+word: string                  # unique per (topic, language)
+createdAt: Date               # TTL index: the claim expires after 24 hours
+```
+- Claimed when a topic game's word is picked, not when the game is saved, so requests running at the same time see each other's words
+
 ### Contact (Zod schema, embedded)
 ```
 name?: string
@@ -100,7 +109,8 @@ Image.objects[].contact ---> Contact (embedded)
 1. Client calls `GET /api/new-game?score=N&lang=L&topic=T`
 2. Server connects to MongoDB (singleton cached connection)
 3. `generateWordAndPictureUntilSuccess()` finds or generates a word + image
-   - Checks DB for existing word not shown today
+   - With a topic, always asks gpt-6-luna for a list of words and picks one, avoiding (in the prompt and when picking) the words claimed on that topic and language in the last 24 hours (`recentTopicWords`). The picked word is claimed at once as a `TopicWord`, before the slow image step, so parallel preload requests can't pick the same word; a failed claim (unique index) means another request took it, and the next word in the same reply is tried. If every usable word is taken, one is reused so a narrow topic still plays
+   - Without a topic, checks DB for existing word not shown today
    - For a word with stored images, `pickImage()` chooses one (uploads first) and its R2 URL is returned; an extra generated image is made in the background unless the word is full
    - Otherwise generates a new image, stores it in R2 and returns its R2 URL. Its art style comes from a new gpt-6-luna description of a random time and place, saved as an `ArtStyle`; with `savedStyle=1` a random saved `ArtStyle` is reused instead, saving that call (falls back to a new description when none are saved)
    - Falls back to OpenAI generation with retry loop
