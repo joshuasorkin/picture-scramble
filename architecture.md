@@ -19,6 +19,11 @@ contact?: Contact             # artist/creator attribution
 topic?: string                # optional theme constraint
 date_create: Date
 date_solve?: Date             # set when player solves the puzzle
+solveSeconds?: number         # timer value at solve (visible time only), reported by the client (unverified)
+date_skip?: Date              # set when the player skips an unsolved round (first skip only)
+date_hidden?: Date            # last time the page was hidden during an unsolved round
+hideCount?: number            # times the page was hidden during an unsolved round
+activeSeconds?: number        # visible time on an unsolved round at its last hide or skip, from the client (unverified)
 date_start?: Date             # set when the game is first shown to a player (unset for unshown preloads)
 visitorId?: string            # anonymous visitor (vid cookie) the game was shown to
 visitId?: string              # -> Visit the game was shown in
@@ -103,11 +108,11 @@ Image.objects[].contact ---> Contact (embedded)
 2. After each reorder, client computes SHA-256 of current arrangement
 3. If hash matches `solutionHash` -> instant auto-submit (no server round-trip)
 4. Manual submit: `GET /api/check-game?gameId=X&playerSolution=Y`
-   - Correct: sets `date_solve`, returns compliment, score increments by `puzzleValue`
+   - Correct: sets `date_solve` and `solveSeconds` (optional `&solveSeconds=N` param), returns compliment, score increments by `puzzleValue`
    - Incorrect: returns `mismatches[]` (indices of wrong characters), `puzzleValue` decrements
 
 ### Share Flow
-1. A timer starts at 0:00 when a game is shown (`startedAt` in client state) and stops on solve (`solveSeconds`); wrong guesses don't stop it
+1. A timer starts at 0:00 when a game is shown and stops on solve (`solveSeconds`); wrong guesses don't stop it. It counts only while the page is visible: `clock` in client state (`src/lib/game/clock.ts`) pauses on `visibilitychange` to hidden and resumes when visible, and a game shown in a background tab starts paused
 2. On solve, a "Share this puzzle" button appears under the picture. It builds "I solved this Utu's Wild Words puzzle in X seconds, how about you?" and a link `/?puzzle=<gameId>&lang=L&topic=T&utm_source=share` (`src/lib/game/share.ts`). `lang` and `topic` are the sharer's own URL params, so they carry on to the receiver's later games
 3. Phones open the native share sheet (`navigator.share`); elsewhere the message and link are copied to the clipboard. Each tap sends `{type:"share", gameId}`, which increments `Game.shareCount`
 4. The receiver's page reads `?puzzle=` once and calls `GET /api/shared-game?id=X`, which **copies** the shared game into a new Game (same picture, scramble and solution, with `sharedFrom` pointing at the original) so the receiver's round, start and solve are tracked separately from the sharer's. A missing or invalid id falls back to a normal new game
@@ -118,9 +123,12 @@ Image.objects[].contact ---> Contact (embedded)
 1. On page load the client sends `POST /api/game-event {type:"visit", referrer, utmSource}` (once per page load); later events wait for it so a new visitor's cookie is set first
 2. Server reads the `vid` cookie (random UUID; created and set on first event, 1 year) and calls `touchVisit()`: extends the visitor's visit if active in the last 30 minutes, otherwise creates a new Visit
 3. When a game is shown, client sends `{type:"start", gameId}`; server touches the visit and sets `date_start`, `visitorId`, `visitId` on the game (first event only)
-4. On an auto-submit solve the client sends `{type:"solve", gameId, solution}`; the server sets `date_solve` only if the solution matches
-5. `getStats(from, to, tz)` unions visits and started games, buckets them by local day, and returns per-day and whole-range visitors, visits, rounds, solves and per-visitor averages. Whole-range visitors are deduplicated, so they are not the sum of the days
-6. Viewed at `/stats?key=STATS_KEY` (dashboard; 404 without the key) or `GET /api/stats?key=…&from=&to=&tz=` (JSON). Defaults: last 14 days, America/Los_Angeles
+4. On an auto-submit solve the client sends `{type:"solve", gameId, solution, solveSeconds}`; the server sets `date_solve` and `solveSeconds` only if the solution matches. `solveSeconds` is the timer value the player saw; it is client-reported, so `date_solve - date_start` is the tamper-resistant measure (wall-clock, including time away)
+5. When the page is hidden during an unsolved round (another tab, minimized, or closed: browsers fire `visibilitychange` on close too), the client sends `{type:"hide", gameId, activeSeconds}`; the server increments `hideCount` and sets `date_hidden` and `activeSeconds`. Skip sends `{type:"skip", gameId, activeSeconds}` and sets `date_skip`. Both are ignored for rounds that were never shown, are solved or are skipped
+6. Client-reported seconds (`solveSeconds`, `activeSeconds`) are validated by `reportedSeconds` (whole seconds, 0 to 24 h); a missing or invalid value is dropped and the event or answer check still goes ahead
+7. A round's outcome: **solved** (`date_solve`), **skipped** (`date_skip`), otherwise **abandoned** (left open or closed). `date_hidden` says when an abandoned player last left; the server can't tell a closed tab from one still open in the background
+8. `getStats(from, to, tz)` unions visits and started games, buckets them by local day, and returns per-day and whole-range visitors, visits, rounds, solves and per-visitor averages. Whole-range visitors are deduplicated, so they are not the sum of the days
+9. Viewed at `/stats?key=STATS_KEY` (dashboard; 404 without the key) or `GET /api/stats?key=…&from=&to=&tz=` (JSON). Defaults: last 14 days, America/Los_Angeles
 - A **round** is a game that was shown, not a game that was created: preloads that are never shown have no `date_start`
 
 ### Pull-to-Submit Gesture
@@ -236,7 +244,7 @@ Image.objects[].contact ---> Contact (embedded)
 | POST   | `/api/upload`       | Accept user-submitted images     |
 | GET    | `/api/default-contact` | Fetch default artist contact  |
 | GET    | `/api/shared-game`  | Copy a shared game into a new game for the receiver |
-| POST   | `/api/game-event`   | Record visit / round start / client-side solve / share |
+| POST   | `/api/game-event`   | Record visit / round start / client-side solve / share / hide / skip |
 | GET    | `/api/stats`        | Visitor/visit/round stats as JSON (needs `STATS_KEY`) |
 | GET    | `/stats`            | Stats dashboard page (needs `STATS_KEY`) |
 
@@ -260,7 +268,7 @@ The product goal is more active users: bring new players in, keep them past the 
 | 3 | Bounce rate and time to first puzzle | Bounce rate: share of visits with no round. Time to first puzzle: time from a visit's start to its first round's `date_start` (median and p90) | Existing for bounce rate; time to first puzzle needs a first-round marker per visit, or the client to report load time | planned |
 | 4 | First-visit funnel | For visitors on their first visit: share reaching each step: landed, 1st puzzle shown, 1st solve, 2nd puzzle, 5th puzzle | Rounds and solves per visit (`Game.visitId`); landed = `Visit` exists | planned |
 | 5 | Acquisition by source | Visitors, new visitors and return rate (KPI 1) grouped by `utmSource`, falling back to `referrer`, then "direct" | `Visit.referrer` and `Visit.utmSource` (already recorded) | planned |
-| 6 | Skip and solve rate by difficulty | Per word length and language: share of rounds solved, share skipped (started, not solved, followed by another round in the same visit) and median time to solve (`date_solve - date_start`) | Mostly existing; skips may need an explicit `skip` event | planned |
+| 6 | Skip and solve rate by difficulty | Per word length and language: share of rounds solved, share skipped (`date_skip`), share abandoned, and median time to solve (`solveSeconds` for visible time, `date_solve - date_start` for wall-clock) | Existing | planned |
 | 7 | Sharing | Shares per day and visits arriving from a share | `Game.shareCount` (per game, not per day: a per-day count needs share timestamps), `Visit.utmSource = "share"`, and games with `sharedFrom` (puzzles opened from a share) | planned |
 | 8 | Mobile vs. desktop | KPIs 1, 3 and 9 split by device class | New: device class (mobile/tablet/desktop, from user agent) on `Visit` | planned |
 | 9 | Daily activity (baseline) | Unique visitors, visits / visitor, puzzles played / visitor, puzzles solved / visitor, per day and for the range | Existing | done |

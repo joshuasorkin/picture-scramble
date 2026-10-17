@@ -18,13 +18,15 @@ export async function recordGameStart(
 
 // Auto-submitted solves are detected client-side, so the server only hears
 // about them here. The solution is checked so a solve cannot be faked.
+// solveSeconds comes from the client's timer and is not checked.
 export async function recordGameSolve(
   gameId: string,
-  solution: string
+  solution: string,
+  solveSeconds?: number
 ): Promise<boolean> {
   const result = await Game.updateOne(
     { _id: gameId, solution, date_solve: { $exists: false } },
-    { date_solve: new Date() }
+    { date_solve: new Date(), solveSeconds }
   );
   return result.modifiedCount > 0;
 }
@@ -32,5 +34,40 @@ export async function recordGameSolve(
 // Each tap of the Share button counts, including repeat shares of one game.
 export async function recordGameShare(gameId: string): Promise<boolean> {
   const result = await Game.updateOne({ _id: gameId }, { $inc: { shareCount: 1 } });
+  return result.modifiedCount > 0;
+}
+
+// The player hid the page (switched tabs, minimized, or closed it) during an
+// unsolved round. activeSeconds is the visible time so far, from the client.
+export async function recordGameHide(
+  gameId: string,
+  activeSeconds?: number
+): Promise<boolean> {
+  const result = await Game.updateOne(
+    {
+      _id: gameId,
+      date_start: { $exists: true },
+      date_solve: { $exists: false },
+      date_skip: { $exists: false },
+    },
+    { $set: { date_hidden: new Date(), activeSeconds }, $inc: { hideCount: 1 } }
+  );
+  return result.modifiedCount > 0;
+}
+
+// The player tapped Skip on an unsolved round. Only the first skip counts.
+export async function recordGameSkip(
+  gameId: string,
+  activeSeconds?: number
+): Promise<boolean> {
+  const result = await Game.updateOne(
+    {
+      _id: gameId,
+      date_start: { $exists: true },
+      date_solve: { $exists: false },
+      date_skip: { $exists: false },
+    },
+    { date_skip: new Date(), activeSeconds }
+  );
   return result.modifiedCount > 0;
 }

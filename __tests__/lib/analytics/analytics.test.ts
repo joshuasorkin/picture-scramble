@@ -4,7 +4,13 @@ import "@/../__tests__/helpers/setup";
 import { Game } from "@/lib/db/models/game";
 import { Visit } from "@/lib/db/models/visit";
 import { getSHA256Hash } from "@/lib/game/hash";
-import { recordGameStart, recordGameSolve } from "@/lib/analytics/game-events";
+import {
+  recordGameStart,
+  recordGameSolve,
+  recordGameHide,
+  recordGameSkip,
+} from "@/lib/analytics/game-events";
+import { reportedSeconds } from "@/lib/analytics/reported-seconds";
 import { touchVisit, VISIT_TIMEOUT_MS } from "@/lib/analytics/visits";
 import { getStats } from "@/lib/analytics/stats";
 
@@ -49,8 +55,76 @@ describe("recordGameSolve", () => {
 
   it("ignores a wrong solution", async () => {
     const game = await createGame();
-    expect(await recordGameSolve(game.id, "ppale")).toBe(false);
-    expect((await Game.findById(game.id))?.date_solve).toBeUndefined();
+    expect(await recordGameSolve(game.id, "ppale", 12)).toBe(false);
+    const updated = await Game.findById(game.id);
+    expect(updated?.date_solve).toBeUndefined();
+    expect(updated?.solveSeconds).toBeUndefined();
+  });
+
+  it("records the solve time once", async () => {
+    const game = await createGame();
+    expect(await recordGameSolve(game.id, "apple", 42)).toBe(true);
+    expect(await recordGameSolve(game.id, "apple", 99)).toBe(false);
+    expect((await Game.findById(game.id))?.solveSeconds).toBe(42);
+  });
+});
+
+describe("recordGameHide", () => {
+  it("counts each hide and keeps the latest visible time", async () => {
+    const game = await createGame({ date_start: new Date() });
+    expect(await recordGameHide(game.id, 5)).toBe(true);
+    expect(await recordGameHide(game.id, 9)).toBe(true);
+    const updated = await Game.findById(game.id);
+    expect(updated?.hideCount).toBe(2);
+    expect(updated?.activeSeconds).toBe(9);
+    expect(updated?.date_hidden).toBeInstanceOf(Date);
+  });
+
+  it("keeps the last time when none is reported", async () => {
+    const game = await createGame({ date_start: new Date() });
+    await recordGameHide(game.id, 5);
+    await recordGameHide(game.id);
+    expect((await Game.findById(game.id))?.activeSeconds).toBe(5);
+  });
+
+  it("ignores rounds that are solved, skipped or never shown", async () => {
+    const solved = await createGame({ date_start: new Date(), date_solve: new Date() });
+    const skipped = await createGame({ date_start: new Date(), date_skip: new Date() });
+    const unshown = await createGame();
+    for (const game of [solved, skipped, unshown]) {
+      expect(await recordGameHide(game.id, 5)).toBe(false);
+      expect((await Game.findById(game.id))?.hideCount).toBeUndefined();
+    }
+  });
+});
+
+describe("recordGameSkip", () => {
+  it("records the first skip of an unsolved round", async () => {
+    const game = await createGame({ date_start: new Date() });
+    expect(await recordGameSkip(game.id, 30)).toBe(true);
+    expect(await recordGameSkip(game.id, 31)).toBe(false);
+    const updated = await Game.findById(game.id);
+    expect(updated?.date_skip).toBeInstanceOf(Date);
+    expect(updated?.activeSeconds).toBe(30);
+  });
+
+  it("ignores a solved round", async () => {
+    const game = await createGame({ date_start: new Date(), date_solve: new Date() });
+    expect(await recordGameSkip(game.id, 30)).toBe(false);
+    expect((await Game.findById(game.id))?.date_skip).toBeUndefined();
+  });
+});
+
+describe("reportedSeconds", () => {
+  it("keeps a valid time", () => {
+    expect(reportedSeconds.parse(0)).toBe(0);
+    expect(reportedSeconds.parse(86_400)).toBe(86_400);
+  });
+
+  it("drops a missing or invalid time instead of failing", () => {
+    for (const value of [undefined, -1, 1.5, 86_401, NaN, "12"]) {
+      expect(reportedSeconds.parse(value)).toBeUndefined();
+    }
   });
 });
 

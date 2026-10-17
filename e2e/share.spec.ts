@@ -74,6 +74,72 @@ test.describe("Timer", () => {
   });
 });
 
+// Pretend the player switched tabs (or came back)
+async function setPageHidden(page: Page, hidden: boolean) {
+  await page.evaluate((hidden) => {
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      get: () => (hidden ? "hidden" : "visible"),
+    });
+    document.dispatchEvent(new Event("visibilitychange"));
+  }, hidden);
+}
+
+// Record the analytics events the page sends
+function captureEvents(page: Page): Record<string, unknown>[] {
+  const events: Record<string, unknown>[] = [];
+  page.route("**/api/game-event*", (route) => {
+    events.push(route.request().postDataJSON());
+    route.fulfill({ status: 204 });
+  });
+  return events;
+}
+
+test.describe("Away from the puzzle", () => {
+  test("the timer pauses while the page is hidden", async ({ page }) => {
+    await page.clock.install();
+    await page.goto("/");
+    await expect(page.locator("#rack-container")).toBeVisible();
+
+    await page.clock.runFor(10_000);
+    await setPageHidden(page, true);
+    await page.clock.runFor(600_000);
+    await setPageHidden(page, false);
+    await page.clock.runFor(5_000);
+    await expect(page.locator("#timer")).toHaveText("0:15");
+  });
+
+  test("records leaving, skipping and solving with visible time", async ({ page }) => {
+    await mockSolvableGame(page);
+    const events = captureEvents(page);
+    await page.clock.install();
+    await page.goto("/");
+    await expect(page.locator("#rack-container")).toBeVisible();
+
+    await page.clock.runFor(7_000);
+    await setPageHidden(page, true);
+    await expect.poll(() => events.find((e) => e.type === "hide")).toMatchObject({
+      gameId: SOLVABLE_GAME.gameId,
+      activeSeconds: 7,
+    });
+
+    await page.clock.runFor(60_000);
+    await setPageHidden(page, false);
+    await page.clock.runFor(3_000);
+    await page.locator(".skip-button").click();
+    await expect.poll(() => events.find((e) => e.type === "skip")).toMatchObject({
+      activeSeconds: 10,
+    });
+
+    await expect(page.locator("#rack-container")).toBeVisible();
+    await page.clock.runFor(4_000);
+    await solveByDragging(page);
+    await expect.poll(() => events.find((e) => e.type === "solve")).toMatchObject({
+      solveSeconds: 4,
+    });
+  });
+});
+
 test.describe("Share", () => {
   test("is hidden until the puzzle is solved", async ({ page }) => {
     await page.goto("/");

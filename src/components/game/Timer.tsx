@@ -2,31 +2,28 @@
 
 import { useEffect, useState } from "react";
 import { formatTimer } from "@/lib/game/share";
+import { clockSeconds, type Clock } from "@/lib/game/clock";
 
 interface TimerProps {
-  // When the current game was shown (ms epoch); null while loading
-  startedAt: number | null;
+  // Clock for the current game; null while loading
+  clock: Clock | null;
   // Final time once solved; stops the clock
   solveSeconds: number | null;
 }
 
-export default function Timer({ startedAt, solveSeconds }: TimerProps) {
+export default function Timer({ clock, solveSeconds }: TimerProps) {
   const [now, setNow] = useState(() => Date.now());
-  const running = startedAt !== null && solveSeconds === null;
+  const running = clock?.resumedAt != null && solveSeconds === null;
 
   useEffect(() => {
     if (!running) return;
     const interval = setInterval(() => setNow(Date.now()), 250);
     return () => clearInterval(interval);
-  }, [running, startedAt]);
+  }, [running, clock]);
 
-  let seconds = 0;
-  if (solveSeconds !== null) {
-    seconds = solveSeconds;
-  } else if (startedAt !== null) {
-    // now can trail a just-started game until the next tick
-    seconds = Math.max(0, Math.floor((now - startedAt) / 1000));
-  }
+  // now can trail a just-started or just-resumed clock until the next tick;
+  // clockMs treats that as no time passed
+  const seconds = solveSeconds ?? clockSeconds(clock, now);
 
   return (
     <p id="timer-line">

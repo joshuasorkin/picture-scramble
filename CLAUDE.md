@@ -67,6 +67,7 @@ src/
 - [ ] Score increments correctly
 - [ ] Click to continue → next game
 - [ ] Timer starts at 0:00, counts up, and stops on solve
+- [ ] Timer pauses while you're on another tab and resumes when you come back
 - [ ] Share button appears on solve; share sheet (phone) or "Link copied!" (desktop)
 - [ ] Shared link opens that puzzle first, keeps ?lang/?topic for later games, and drops ?puzzle from the URL
 - [ ] Skip button works

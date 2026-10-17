@@ -4,6 +4,13 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import type { Contact } from "@/lib/game/contact-info";
 import { shareMessage, shareUrl } from "@/lib/game/share";
+import {
+  startClock,
+  pauseClock,
+  resumeClock,
+  clockSeconds,
+  type Clock,
+} from "@/lib/game/clock";
 
 export type GameStatus =
   | "loading"
@@ -34,8 +41,8 @@ export interface GameState {
   mismatches: number[];
   errorMessage: string;
   defaultContactInfo: string;
-  // When the current game was shown (ms epoch); null while loading
-  startedAt: number | null;
+  // Counts visible time on the current game; null while loading
+  clock: Clock | null;
   // Whole seconds taken to solve; set on victory
   solveSeconds: number | null;
 }
@@ -66,7 +73,7 @@ function preloadImage(url: string): Promise<void> {
   });
 }
 
-function postGameEvent(event: Record<string, string>): Promise<void> {
+function postGameEvent(event: Record<string, string | number>): Promise<void> {
   return fetch("/api/game-event", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -93,7 +100,7 @@ function sendVisitEvent(): Promise<void> {
 }
 
 // Fire-and-forget analytics event; failures never affect the game.
-function sendGameEvent(event: Record<string, string>): void {
+function sendGameEvent(event: Record<string, string | number>): void {
   sendVisitEvent().then(() => postGameEvent(event));
 }
 
@@ -118,15 +125,14 @@ function clearPuzzleParam(): void {
   window.history.replaceState(window.history.state, "", url);
 }
 
-function victory(s: GameState): GameState {
+function victory(s: GameState, solveSeconds: number): GameState {
   const newScore = s.score + s.puzzleValue;
   return {
     ...s,
     status: "victory",
     score: newScore,
     mismatches: [],
-    solveSeconds:
-      s.startedAt === null ? 0 : Math.round((Date.now() - s.startedAt) / 1000),
+    solveSeconds,
   };
 }
 
@@ -157,12 +163,41 @@ export function useGame() {
     mismatches: [],
     errorMessage: "",
     defaultContactInfo: "",
-    startedAt: null,
+    clock: null,
     solveSeconds: null,
   });
 
   useEffect(() => {
     sendVisitEvent();
+  }, []);
+
+  // Latest state for the visibility listener, which is added once
+  const stateRef = useRef(state);
+  useEffect(() => {
+    stateRef.current = state;
+  });
+
+  // Pause the clock while the page is hidden (another tab, minimized, or
+  // closing) and record that the player left an unsolved puzzle.
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      const now = Date.now();
+      const s = stateRef.current;
+      if (document.visibilityState === "hidden") {
+        if ((s.status === "playing" || s.status === "checking") && s.clock) {
+          sendGameEvent({
+            type: "hide",
+            gameId: s.gameId,
+            activeSeconds: clockSeconds(s.clock, now),
+          });
+        }
+        setState((prev) => (prev.clock ? { ...prev, clock: pauseClock(prev.clock, now) } : prev));
+      } else {
+        setState((prev) => (prev.clock ? { ...prev, clock: resumeClock(prev.clock, now) } : prev));
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
   }, []);
 
   const preloadQueue = useRef<GameData[]>([]);
@@ -202,7 +237,7 @@ export function useGame() {
       mismatches: [],
       puzzleValue: 10,
       errorMessage: "",
-      startedAt: null,
+      clock: null,
       solveSeconds: null,
     }));
 
@@ -242,7 +277,8 @@ export function useGame() {
       picture: gameData!.picture,
       compliment: gameData!.compliment,
       contact: gameData!.contact,
-      startedAt: Date.now(),
+      // A game shown in a background tab waits until the tab is seen
+      clock: startClock(Date.now(), document.visibilityState === "hidden"),
     }));
     sendGameEvent({ type: "start", gameId: gameData.gameId });
 
@@ -254,12 +290,19 @@ export function useGame() {
   const submitGuess = useCallback(
     async (rackString: string, isAutoSubmit = false) => {
       const userInput = rackString.toLowerCase();
+      // Time at submit, so the server records what the timer shows
+      const solveSeconds = clockSeconds(state.clock, Date.now());
 
       if (isAutoSubmit) {
         // Hash already matched client-side
-        sendGameEvent({ type: "solve", gameId: state.gameId, solution: userInput });
+        sendGameEvent({
+          type: "solve",
+          gameId: state.gameId,
+          solution: userInput,
+          solveSeconds,
+        });
         setState((s) => {
-          const next = victory(s);
+          const next = victory(s, solveSeconds);
           scoreRef.current = next.score;
           return next;
         });
@@ -270,7 +313,7 @@ export function useGame() {
 
       try {
         const response = await fetch(
-          `/api/check-game?gameId=${state.gameId}&playerSolution=${encodeURIComponent(userInput)}`
+          `/api/check-game?gameId=${state.gameId}&playerSolution=${encodeURIComponent(userInput)}&solveSeconds=${solveSeconds}`
         );
         if (!response.ok) throw new Error("Server error");
 
@@ -278,7 +321,7 @@ export function useGame() {
 
         if (result.checkResult) {
           setState((s) => {
-            const next = victory(s);
+            const next = victory(s, solveSeconds);
             scoreRef.current = next.score;
             return next;
           });
@@ -298,7 +341,7 @@ export function useGame() {
         }));
       }
     },
-    [state.gameId]
+    [state.gameId, state.clock]
   );
 
   const checkAutoSubmit = useCallback(
@@ -318,8 +361,13 @@ export function useGame() {
   }, []);
 
   const skipGame = useCallback(() => {
+    sendGameEvent({
+      type: "skip",
+      gameId: state.gameId,
+      activeSeconds: clockSeconds(state.clock, Date.now()),
+    });
     startNewGame();
-  }, [startNewGame]);
+  }, [startNewGame, state.gameId, state.clock]);
 
   // Message and link for sharing the solved puzzle; records the share
   const shareGame = useCallback((): ShareContent | null => {

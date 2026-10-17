@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { connectToDatabase } from "@/lib/db/connection";
-import { recordGameShare, recordGameStart, recordGameSolve } from "@/lib/analytics/game-events";
+import {
+  recordGameHide,
+  recordGameShare,
+  recordGameSkip,
+  recordGameStart,
+  recordGameSolve,
+} from "@/lib/analytics/game-events";
+import { reportedSeconds } from "@/lib/analytics/reported-seconds";
 import { touchVisit } from "@/lib/analytics/visits";
 
 const VISITOR_COOKIE = "vid";
@@ -16,8 +23,15 @@ const bodySchema = z.discriminatedUnion("type", [
     utmSource: z.string().max(100).optional(),
   }),
   z.object({ type: z.literal("start"), gameId }),
-  z.object({ type: z.literal("solve"), gameId, solution: z.string().min(1) }),
+  z.object({
+    type: z.literal("solve"),
+    gameId,
+    solution: z.string().min(1),
+    solveSeconds: reportedSeconds,
+  }),
   z.object({ type: z.literal("share"), gameId }),
+  z.object({ type: z.literal("hide"), gameId, activeSeconds: reportedSeconds }),
+  z.object({ type: z.literal("skip"), gameId, activeSeconds: reportedSeconds }),
 ]);
 
 // Keep only the referring site's hostname, and only when it is another site.
@@ -57,10 +71,16 @@ export async function POST(request: NextRequest) {
       await recordGameStart(event.gameId, visitorId, visit.id);
     } else if (event.type === "solve") {
       await touchVisit(visitorId);
-      await recordGameSolve(event.gameId, event.solution);
-    } else {
+      await recordGameSolve(event.gameId, event.solution, event.solveSeconds);
+    } else if (event.type === "share") {
       await touchVisit(visitorId);
       await recordGameShare(event.gameId);
+    } else if (event.type === "hide") {
+      await touchVisit(visitorId);
+      await recordGameHide(event.gameId, event.activeSeconds);
+    } else {
+      await touchVisit(visitorId);
+      await recordGameSkip(event.gameId, event.activeSeconds);
     }
 
     const response = new NextResponse(null, { status: 204 });

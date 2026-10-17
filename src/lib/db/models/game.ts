@@ -10,6 +10,11 @@ export interface IGame extends Document {
   compliment: string;
   date_create: Date;
   date_solve?: Date;
+  solveSeconds?: number;
+  date_skip?: Date;
+  date_hidden?: Date;
+  hideCount?: number;
+  activeSeconds?: number;
   date_start?: Date;
   visitorId?: string;
   visitId?: string;
@@ -28,6 +33,15 @@ const gameSchema = new Schema<IGame>({
   compliment: { type: String },
   date_create: { type: Date, required: true },
   date_solve: { type: Date },
+  // Solve time shown on the player's timer, as reported by the client
+  solveSeconds: { type: Number },
+  // Set when the player skips an unsolved round
+  date_skip: { type: Date },
+  // Last time the page was hidden during an unsolved round, and how often
+  date_hidden: { type: Date },
+  hideCount: { type: Number },
+  // Visible time on an unsolved round at its last hide or skip, from the client
+  activeSeconds: { type: Number },
   date_start: { type: Date },
   visitorId: { type: String },
   visitId: { type: String },

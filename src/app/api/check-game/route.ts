@@ -3,6 +3,7 @@ import { z } from "zod";
 import { connectToDatabase } from "@/lib/db/connection";
 import { Game } from "@/lib/db/models/game";
 import { findMismatches } from "@/lib/game/mismatches";
+import { reportedSeconds } from "@/lib/analytics/reported-seconds";
 
 const querySchema = z.object({
   gameId: z.string().min(1),
@@ -27,6 +28,9 @@ export async function GET(request: NextRequest) {
     }
 
     const { gameId, playerSolution } = parseResult.data;
+    // Optional; a missing or bad value is dropped and the check goes ahead
+    const rawSeconds = searchParams.get("solveSeconds");
+    const solveSeconds = reportedSeconds.parse(rawSeconds ? Number(rawSeconds) : undefined);
 
     const game = await Game.findById(gameId);
     if (!game) {
@@ -37,7 +41,7 @@ export async function GET(request: NextRequest) {
     let mismatches: number[] = [];
 
     if (checkResult) {
-      await Game.findByIdAndUpdate(gameId, { date_solve: new Date() });
+      await Game.findByIdAndUpdate(gameId, { date_solve: new Date(), solveSeconds });
     } else {
       mismatches = findMismatches(game.solution, playerSolution);
     }

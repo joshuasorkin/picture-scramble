@@ -105,7 +105,7 @@ export default function GameContainer() {
 
       <Footer
         score={state.score}
-        startedAt={state.startedAt}
+        clock={state.clock}
         solveSeconds={state.solveSeconds}
         onContactClick={() => setContactOpen(true)}
         onSkipClick={skipGame}
