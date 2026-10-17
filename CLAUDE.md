@@ -9,7 +9,7 @@ AI-generated word scramble game ("Utu's Wild Words"). Players unscramble words b
 ## Architecture
 - **Framework:** Next.js 15 with App Router, TypeScript strict mode
 - **Database:** MongoDB via Mongoose (singleton connection cached on globalThis)
-- **AI:** OpenAI GPT-3.5-turbo (words/compliments) + gpt-image-2.5-flare (images)
+- **AI:** OpenAI gpt-6-luna (words/compliments) + gpt-image-2.5-flare (images)
 - **Styling:** Tailwind CSS + custom CSS animations
 - **Deployment:** Fly.io via Docker (persistent server for slow image generation calls)
 

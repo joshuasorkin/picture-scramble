@@ -90,7 +90,7 @@ Image.objects[].contact ---> Contact (embedded)
    - Falls back to OpenAI generation with retry loop
    - After 3 repeats of words shown today, picks random word from local wordlist
    - Gives up and returns 500 after 3 unexpected errors (e.g. OpenAI failures) or 20 attempts in total, so a broken image model can't make a request spin
-4. `generateCompliment()` via GPT-3.5-turbo
+4. `generateCompliment()` via `gpt-6-luna`; falls back to "🎉" on failure so a compliment can never fail the game
 5. `scramblePhrase()` shuffles the word (Fisher-Yates)
 6. `getSHA256Hash()` creates client-verifiable hash
 7. Game document saved to MongoDB
@@ -201,7 +201,8 @@ Image.objects[].contact ---> Contact (embedded)
 - Configured by `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `IMAGE_BASE_URL`
 
 ### OpenAI
-- **GPT-3.5-turbo:** word generation, compliment generation
+- **`gpt-6-luna`:** word generation, compliment generation (`CHAT_MODEL` in `client.ts`), with `reasoning_effort: "none"` for speed. Without that, reasoning tokens use up the small `max_completion_tokens` budget and the answer comes back empty. Replaced `gpt-3.5-turbo`, which OpenAI shut down on 23 October 2026
+- **Word generation asks for a list of 20 and `pickWord()` picks one at random** (single words of 4 to `WORD_LENGTH_MAX` letters). Current models answer "a random word" with the same word nearly every time (e.g. "lantern" 8 out of 8), and raising temperature does not help
 - **`gpt-image-2.5-flare`:** image generation for new words (1024×1024, medium quality, WebP; about $0.013 and 10–13 s per image in October 2026). It returns image data rather than a URL, so images are stored in R2 before being served. DALL-E 3 was shut down by OpenAI on 12 May 2026
 - Prompts stored in environment variables with `topic` and `language` placeholders
 - Configurable timeouts and retry counts via env vars

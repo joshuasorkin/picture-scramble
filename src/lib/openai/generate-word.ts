@@ -1,6 +1,11 @@
-import { getOpenAIClient } from "./client";
+import { CHAT_MODEL, getOpenAIClient } from "./client";
 import fs from "fs";
 import path from "path";
+
+// Models answer "a random word" with the same word nearly every time, so ask
+// for a list and pick from it
+const WORD_LIST_SUFFIX =
+  " Instead of one word, respond with 20 different such words separated by commas, and nothing else.";
 
 let wordListCache: string[] | null = null;
 
@@ -16,6 +21,26 @@ export function getRandomWord(wordList?: string[]): string {
   const list = wordList ?? getWordList();
   const randomIndex = Math.floor(Math.random() * list.length);
   return list[randomIndex]!;
+}
+
+/**
+ * Pick a random word from a comma- or newline-separated model response,
+ * keeping only single words of 4 to maxLength letters.
+ */
+export function pickWord(
+  response: string,
+  maxLength: number,
+  random: () => number = Math.random
+): string | null {
+  const candidates = response
+    .split(/[,\n]/)
+    .map((w) => w.trim().toLowerCase().replace(/^["'“‘]+|["'”’.!]+$/g, ""))
+    .filter((w) => /^\p{L}+$/u.test(w))
+    .filter((w) => [...w].length >= 4 && [...w].length <= maxLength);
+  if (candidates.length === 0) {
+    return null;
+  }
+  return candidates[Math.floor(random() * candidates.length)]!;
 }
 
 /**
@@ -57,14 +82,16 @@ export async function generateWord(
 
   const client = getOpenAIClient();
   const response = await client.chat.completions.create({
-    model: "gpt-3.5-turbo",
-    messages: [{ role: "user", content: prompt }],
-    max_tokens: 10,
+    model: CHAT_MODEL,
+    messages: [{ role: "user", content: prompt + WORD_LIST_SUFFIX }],
+    max_completion_tokens: 200,
+    reasoning_effort: "none",
   });
 
-  const word = response.choices[0]?.message?.content?.toLowerCase().trim();
+  const wordLengthMax = Number(process.env.WORD_LENGTH_MAX ?? 9);
+  const word = pickWord(response.choices[0]?.message?.content ?? "", wordLengthMax);
   if (!word) {
-    throw new Error("No word generated from OpenAI response");
+    throw new Error("No usable word in OpenAI response");
   }
 
   return word;

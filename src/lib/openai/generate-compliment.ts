@@ -1,4 +1,7 @@
-import { getOpenAIClient } from "./client";
+import { CHAT_MODEL, getOpenAIClient } from "./client";
+
+// Shown if generation fails, so a compliment can never break a game
+export const FALLBACK_COMPLIMENT = "🎉";
 
 export async function generateCompliment(
   word: string,
@@ -12,12 +15,19 @@ export async function generateCompliment(
     prompt += " Do not include an English translation.";
   }
 
-  const client = getOpenAIClient();
-  const response = await client.chat.completions.create({
-    model: "gpt-3.5-turbo",
-    messages: [{ role: "user", content: prompt }],
-    max_tokens: 10,
-  });
+  try {
+    const client = getOpenAIClient();
+    const response = await client.chat.completions.create({
+      model: CHAT_MODEL,
+      messages: [{ role: "user", content: prompt }],
+      // Non-Latin scripts need more tokens per word
+      max_completion_tokens: 30,
+      reasoning_effort: "none",
+    });
 
-  return response.choices[0]?.message?.content ?? "";
+    return response.choices[0]?.message?.content?.trim() || FALLBACK_COMPLIMENT;
+  } catch (error) {
+    console.error("Error generating compliment:", error);
+    return FALLBACK_COMPLIMENT;
+  }
 }

@@ -23,7 +23,7 @@ export const envSchema = z.object({
     "Generate a single easy language word (a concrete noun, color, or simple action) that is between 4 and 9 letters long. Reply with ONLY the word, nothing else."
   ),
   GENERATE_WORD_PROMPT_ABSTRACT: z.string().default(
-    "Generate a single language word (can be abstract, unusual, or challenging) that is between 4 and 9 letters long. Reply with ONLY the word, nothing else."
+    "Generate a random language word that is challenging to draw, such as an emotion, a personality trait, an idea, or an experience, between 4 to 9 characters in length.  It must be a meaningful noun, adjective, or verb that people use in conversation, not a filler word like an adverb, conjunction, or preposition.  Do not surround it with quotation marks or punctuation.  Respond only with the word itself."
   ),
   GENERATE_WORD_PROMPT_TOPIC: z.string().default(
     "Generate a single language word related to the topic 'topic' that is between 4 and 9 letters long. Reply with ONLY the word, nothing else."
