@@ -5,12 +5,13 @@ import { useGame } from "@/hooks/useGame";
 import GameImage from "./GameImage";
 
 import GameMessage from "./GameMessage";
+import ShareButton from "./ShareButton";
 import TileRack from "./TileRack";
 import ContactModal from "./ContactModal";
 import Footer from "./Footer";
 
 export default function GameContainer() {
-  const { state, startNewGame, submitGuess, checkAutoSubmit, skipGame } =
+  const { state, startNewGame, submitGuess, checkAutoSubmit, skipGame, shareGame } =
     useGame();
   const [contactOpen, setContactOpen] = useState(false);
   const [rackString, setRackString] = useState("");
@@ -88,6 +89,8 @@ export default function GameContainer() {
 
       <GameMessage message={message.text} isRainbow={message.rainbow} />
 
+      {isVictory && <ShareButton onShare={shareGame} />}
+
       {showRack && (
         <TileRack
           scramble={state.scramble}
@@ -102,6 +105,8 @@ export default function GameContainer() {
 
       <Footer
         score={state.score}
+        startedAt={state.startedAt}
+        solveSeconds={state.solveSeconds}
         onContactClick={() => setContactOpen(true)}
         onSkipClick={skipGame}
         showSkip={isPlaying}

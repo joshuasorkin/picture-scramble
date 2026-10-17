@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import type { Contact } from "@/lib/game/contact-info";
+import { shareMessage, shareUrl } from "@/lib/game/share";
 
 export type GameStatus =
   | "loading"
@@ -33,6 +34,15 @@ export interface GameState {
   mismatches: number[];
   errorMessage: string;
   defaultContactInfo: string;
+  // When the current game was shown (ms epoch); null while loading
+  startedAt: number | null;
+  // Whole seconds taken to solve; set on victory
+  solveSeconds: number | null;
+}
+
+export interface ShareContent {
+  text: string;
+  url: string;
 }
 
 const IMAGE_PRELOAD_TIMEOUT_MS = 10000;
@@ -87,6 +97,39 @@ function sendGameEvent(event: Record<string, string>): void {
   sendVisitEvent().then(() => postGameEvent(event));
 }
 
+// Load a picture and game data, warming the image cache first
+async function fetchGame(url: string): Promise<GameData | null> {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) return null;
+    const gameData: GameData = await response.json();
+    await preloadImage(gameData.picture);
+    return gameData;
+  } catch {
+    return null;
+  }
+}
+
+// Drop ?puzzle= once the shared puzzle has loaded, so a reload or the next
+// game doesn't replay it; ?lang= and ?topic= stay for later games.
+function clearPuzzleParam(): void {
+  const url = new URL(window.location.href);
+  url.searchParams.delete("puzzle");
+  window.history.replaceState(window.history.state, "", url);
+}
+
+function victory(s: GameState): GameState {
+  const newScore = s.score + s.puzzleValue;
+  return {
+    ...s,
+    status: "victory",
+    score: newScore,
+    mismatches: [],
+    solveSeconds:
+      s.startedAt === null ? 0 : Math.round((Date.now() - s.startedAt) / 1000),
+  };
+}
+
 async function sha256Hash(str: string): Promise<string> {
   const data = new TextEncoder().encode(str);
   const hashBuffer = await crypto.subtle.digest("SHA-256", data);
@@ -98,6 +141,8 @@ export function useGame() {
   const searchParams = useSearchParams();
   const lang = searchParams.get("lang") ?? undefined;
   const topic = searchParams.get("topic") ?? undefined;
+  // Shared puzzle to show first, read once on mount
+  const sharedPuzzle = useRef(searchParams.get("puzzle"));
 
   const [state, setState] = useState<GameState>({
     status: "loading",
@@ -112,6 +157,8 @@ export function useGame() {
     mismatches: [],
     errorMessage: "",
     defaultContactInfo: "",
+    startedAt: null,
+    solveSeconds: null,
   });
 
   useEffect(() => {
@@ -135,26 +182,15 @@ export function useGame() {
     async (isPreload = false): Promise<GameData | null> => {
       if (isPreload && preloadQueue.current.length > 6) return null;
 
-      try {
-        let url = `/api/new-game?score=${scoreRef.current}`;
-        if (lang) url += `&lang=${encodeURIComponent(lang)}`;
-        if (topic) url += `&topic=${encodeURIComponent(topic)}`;
+      let url = `/api/new-game?score=${scoreRef.current}`;
+      if (lang) url += `&lang=${encodeURIComponent(lang)}`;
+      if (topic) url += `&topic=${encodeURIComponent(topic)}`;
 
-        const response = await fetch(url);
-        if (!response.ok) return null;
-
-        const gameData: GameData = await response.json();
-
-        await preloadImage(gameData.picture);
-
-        if (isPreload) {
-          preloadQueue.current.push(gameData);
-        }
-
-        return gameData;
-      } catch {
-        return null;
+      const gameData = await fetchGame(url);
+      if (gameData && isPreload) {
+        preloadQueue.current.push(gameData);
       }
+      return gameData;
     },
     [lang, topic]
   );
@@ -166,6 +202,8 @@ export function useGame() {
       mismatches: [],
       puzzleValue: 10,
       errorMessage: "",
+      startedAt: null,
+      solveSeconds: null,
     }));
 
     // Fetch default contact if needed
@@ -173,11 +211,16 @@ export function useGame() {
       fetchDefaultContact();
     }
 
-    let gameData: GameData | null;
-    if (preloadQueue.current.length > 0) {
-      gameData = preloadQueue.current.shift()!;
-    } else {
-      gameData = await fetchGameData();
+    let gameData: GameData | null = null;
+    const puzzleId = sharedPuzzle.current;
+    if (puzzleId) {
+      // A missing or invalid shared puzzle falls back to a normal game
+      sharedPuzzle.current = null;
+      gameData = await fetchGame(`/api/shared-game?id=${encodeURIComponent(puzzleId)}`);
+      clearPuzzleParam();
+    }
+    if (!gameData) {
+      gameData = preloadQueue.current.shift() ?? (await fetchGameData());
     }
 
     if (!gameData) {
@@ -199,6 +242,7 @@ export function useGame() {
       picture: gameData!.picture,
       compliment: gameData!.compliment,
       contact: gameData!.contact,
+      startedAt: Date.now(),
     }));
     sendGameEvent({ type: "start", gameId: gameData.gameId });
 
@@ -215,14 +259,9 @@ export function useGame() {
         // Hash already matched client-side
         sendGameEvent({ type: "solve", gameId: state.gameId, solution: userInput });
         setState((s) => {
-          const newScore = s.score + s.puzzleValue;
-          scoreRef.current = newScore;
-          return {
-            ...s,
-            status: "victory",
-            score: newScore,
-            mismatches: [],
-          };
+          const next = victory(s);
+          scoreRef.current = next.score;
+          return next;
         });
         return;
       }
@@ -239,14 +278,9 @@ export function useGame() {
 
         if (result.checkResult) {
           setState((s) => {
-            const newScore = s.score + s.puzzleValue;
-            scoreRef.current = newScore;
-            return {
-              ...s,
-              status: "victory",
-              score: newScore,
-              mismatches: [],
-            };
+            const next = victory(s);
+            scoreRef.current = next.score;
+            return next;
           });
         } else {
           setState((s) => ({
@@ -287,6 +321,16 @@ export function useGame() {
     startNewGame();
   }, [startNewGame]);
 
+  // Message and link for sharing the solved puzzle; records the share
+  const shareGame = useCallback((): ShareContent | null => {
+    if (state.status !== "victory" || state.solveSeconds === null) return null;
+    sendGameEvent({ type: "share", gameId: state.gameId });
+    return {
+      text: shareMessage(state.solveSeconds),
+      url: shareUrl(window.location.origin, state.gameId, lang, topic),
+    };
+  }, [state.status, state.solveSeconds, state.gameId, lang, topic]);
+
   return {
     state,
     startNewGame,
@@ -294,5 +338,6 @@ export function useGame() {
     checkAutoSubmit,
     skipGame,
     clearMismatches,
+    shareGame,
   };
 }

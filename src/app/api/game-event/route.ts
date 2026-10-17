@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { connectToDatabase } from "@/lib/db/connection";
-import { recordGameStart, recordGameSolve } from "@/lib/analytics/game-events";
+import { recordGameShare, recordGameStart, recordGameSolve } from "@/lib/analytics/game-events";
 import { touchVisit } from "@/lib/analytics/visits";
 
 const VISITOR_COOKIE = "vid";
@@ -17,6 +17,7 @@ const bodySchema = z.discriminatedUnion("type", [
   }),
   z.object({ type: z.literal("start"), gameId }),
   z.object({ type: z.literal("solve"), gameId, solution: z.string().min(1) }),
+  z.object({ type: z.literal("share"), gameId }),
 ]);
 
 // Keep only the referring site's hostname, and only when it is another site.
@@ -54,9 +55,12 @@ export async function POST(request: NextRequest) {
     } else if (event.type === "start") {
       const visit = await touchVisit(visitorId);
       await recordGameStart(event.gameId, visitorId, visit.id);
-    } else {
+    } else if (event.type === "solve") {
       await touchVisit(visitorId);
       await recordGameSolve(event.gameId, event.solution);
+    } else {
+      await touchVisit(visitorId);
+      await recordGameShare(event.gameId);
     }
 
     const response = new NextResponse(null, { status: 204 });

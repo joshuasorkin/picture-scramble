@@ -28,3 +28,9 @@ export async function recordGameSolve(
   );
   return result.modifiedCount > 0;
 }
+
+// Each tap of the Share button counts, including repeat shares of one game.
+export async function recordGameShare(gameId: string): Promise<boolean> {
+  const result = await Game.updateOne({ _id: gameId }, { $inc: { shareCount: 1 } });
+  return result.modifiedCount > 0;
+}

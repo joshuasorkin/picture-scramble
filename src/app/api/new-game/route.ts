@@ -53,6 +53,7 @@ export async function GET(request: NextRequest) {
 
     const newGame = new Game({
       language,
+      topic: topicParam ?? undefined,
       solution: word,
       solutionHash,
       scramble,

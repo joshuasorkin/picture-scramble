@@ -66,6 +66,9 @@ src/
 - [ ] Victory animation (360° spin + glitter)
 - [ ] Score increments correctly
 - [ ] Click to continue → next game
+- [ ] Timer starts at 0:00, counts up, and stops on solve
+- [ ] Share button appears on solve; share sheet (phone) or "Link copied!" (desktop)
+- [ ] Shared link opens that puzzle first, keeps ?lang/?topic for later games, and drops ?puzzle from the URL
 - [ ] Skip button works
 - [ ] Contact modal opens/closes with correct info
 - [ ] Preloading works (2nd game loads instantly)

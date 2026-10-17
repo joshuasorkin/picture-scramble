@@ -259,6 +259,34 @@ body {
   border-radius: 5px;
 }
 
+#score-container p {
+  white-space: nowrap;
+}
+
+#timer-line {
+  margin-top: 4px;
+}
+
+#timer {
+  font-variant-numeric: tabular-nums;
+}
+
+#share-button {
+  display: block;
+  margin: 12px auto;
+  padding: 10px 22px;
+  border: none;
+  border-radius: 999px;
+  background: #4b2e09;
+  color: #fff;
+  font-size: 1.1rem;
+  cursor: pointer;
+}
+
+#share-button:hover {
+  background: #8b4513;
+}
+
 .skip-button {
   fill: #4b2e09;
   cursor: pointer;

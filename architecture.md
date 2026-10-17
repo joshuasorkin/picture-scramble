@@ -22,6 +22,8 @@ date_solve?: Date             # set when player solves the puzzle
 date_start?: Date             # set when the game is first shown to a player (unset for unshown preloads)
 visitorId?: string            # anonymous visitor (vid cookie) the game was shown to
 visitId?: string              # -> Visit the game was shown in
+sharedFrom?: string           # original Game id, when this game was opened from a share link
+shareCount?: number           # times the player tapped Share on this game
 ```
 
 ### Visit
@@ -103,6 +105,14 @@ Image.objects[].contact ---> Contact (embedded)
 4. Manual submit: `GET /api/check-game?gameId=X&playerSolution=Y`
    - Correct: sets `date_solve`, returns compliment, score increments by `puzzleValue`
    - Incorrect: returns `mismatches[]` (indices of wrong characters), `puzzleValue` decrements
+
+### Share Flow
+1. A timer starts at 0:00 when a game is shown (`startedAt` in client state) and stops on solve (`solveSeconds`); wrong guesses don't stop it
+2. On solve, a "Share this puzzle" button appears under the picture. It builds "I solved this Utu's Wild Words puzzle in X seconds, how about you?" and a link `/?puzzle=<gameId>&lang=L&topic=T&utm_source=share` (`src/lib/game/share.ts`). `lang` and `topic` are the sharer's own URL params, so they carry on to the receiver's later games
+3. Phones open the native share sheet (`navigator.share`); elsewhere the message and link are copied to the clipboard. Each tap sends `{type:"share", gameId}`, which increments `Game.shareCount`
+4. The receiver's page reads `?puzzle=` once and calls `GET /api/shared-game?id=X`, which **copies** the shared game into a new Game (same picture, scramble and solution, with `sharedFrom` pointing at the original) so the receiver's round, start and solve are tracked separately from the sharer's. A missing or invalid id falls back to a normal new game
+5. `?puzzle=` is then removed from the URL with `history.replaceState`, so a reload or the next game doesn't replay it; `?lang=` and `?topic=` stay
+6. `generateMetadata()` in `src/app/page.tsx` gives a `?puzzle=` link an Open Graph / Twitter preview with the puzzle's picture (which doesn't reveal the word); any failure falls back to the default metadata
 
 ### Analytics Flow
 1. On page load the client sends `POST /api/game-event {type:"visit", referrer, utmSource}` (once per page load); later events wait for it so a new visitor's cookie is set first
@@ -225,7 +235,8 @@ Image.objects[].contact ---> Contact (embedded)
 | GET    | `/api/check-game`   | Verify player's answer           |
 | POST   | `/api/upload`       | Accept user-submitted images     |
 | GET    | `/api/default-contact` | Fetch default artist contact  |
-| POST   | `/api/game-event`   | Record visit / round start / client-side solve |
+| GET    | `/api/shared-game`  | Copy a shared game into a new game for the receiver |
+| POST   | `/api/game-event`   | Record visit / round start / client-side solve / share |
 | GET    | `/api/stats`        | Visitor/visit/round stats as JSON (needs `STATS_KEY`) |
 | GET    | `/stats`            | Stats dashboard page (needs `STATS_KEY`) |
 
@@ -250,14 +261,13 @@ The product goal is more active users: bring new players in, keep them past the 
 | 4 | First-visit funnel | For visitors on their first visit: share reaching each step: landed, 1st puzzle shown, 1st solve, 2nd puzzle, 5th puzzle | Rounds and solves per visit (`Game.visitId`); landed = `Visit` exists | planned |
 | 5 | Acquisition by source | Visitors, new visitors and return rate (KPI 1) grouped by `utmSource`, falling back to `referrer`, then "direct" | `Visit.referrer` and `Visit.utmSource` (already recorded) | planned |
 | 6 | Skip and solve rate by difficulty | Per word length and language: share of rounds solved, share skipped (started, not solved, followed by another round in the same visit) and median time to solve (`date_solve - date_start`) | Mostly existing; skips may need an explicit `skip` event | planned |
-| 7 | Sharing | Shares per day and visits arriving from a share. Needs a share button first (e.g. "share my score" with `?utm_source=share`) | New share event and share feature | planned |
+| 7 | Sharing | Shares per day and visits arriving from a share | `Game.shareCount` (per game, not per day: a per-day count needs share timestamps), `Visit.utmSource = "share"`, and games with `sharedFrom` (puzzles opened from a share) | planned |
 | 8 | Mobile vs. desktop | KPIs 1, 3 and 9 split by device class | New: device class (mobile/tablet/desktop, from user agent) on `Visit` | planned |
 | 9 | Daily activity (baseline) | Unique visitors, visits / visitor, puzzles played / visitor, puzzles solved / visitor, per day and for the range | Existing | done |
 
 ## Next Tasks
 
-**Priority:**
-- **B. "Share this puzzle" link.** After solving, the player can share a link that opens the exact puzzle they solved, with Wordle-style text (e.g. "Solved in 14s, can you beat me?") and `?utm_source=share`. No uploads. This feeds Growth KPI 7 (Sharing). Later, depending on share data: let players type a word for a friend and generate the picture (no photo uploads); user photo uploads come last, if ever, because of moderation.
+**Later, depending on share data:** let players type a word for a friend and generate the picture (no photo uploads); user photo uploads come last, if ever, because of moderation.
 
 0. Build the next `planned` Growth KPI (one per session; see Growth KPIs)
 1. Add language-specific wordlist support (beyond English)

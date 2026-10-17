@@ -15,6 +15,8 @@ export interface IGame extends Document {
   visitId?: string;
   topic?: string;
   contact?: Contact;
+  sharedFrom?: string;
+  shareCount?: number;
 }
 
 const gameSchema = new Schema<IGame>({
@@ -31,6 +33,10 @@ const gameSchema = new Schema<IGame>({
   visitId: { type: String },
   topic: { type: String },
   contact: { type: Schema.Types.Mixed },
+  // Original game this one was copied from when opened from a share link
+  sharedFrom: { type: String },
+  // Times the player tapped Share on this game
+  shareCount: { type: Number },
 });
 
 gameSchema.index({ date_start: 1 }, { sparse: true });
