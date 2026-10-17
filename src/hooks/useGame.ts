@@ -53,6 +53,7 @@ export interface ShareContent {
 }
 
 const IMAGE_PRELOAD_TIMEOUT_MS = 10000;
+const SAVED_STYLE_GAMES = 3;
 
 // Warm the browser cache so the picture is ready when the game is shown.
 // A failed or slow load still resolves, so it never blocks the game.
@@ -202,6 +203,7 @@ export function useGame() {
 
   const preloadQueue = useRef<GameData[]>([]);
   const scoreRef = useRef(0);
+  const gamesRequested = useRef(0);
 
   const fetchDefaultContact = useCallback(async () => {
     try {
@@ -220,6 +222,9 @@ export function useGame() {
       let url = `/api/new-game?score=${scoreRef.current}`;
       if (lang) url += `&lang=${encodeURIComponent(lang)}`;
       if (topic) url += `&topic=${encodeURIComponent(topic)}`;
+      // The first game and the two preloaded with it are ones the player may
+      // wait on, so they reuse a saved art style rather than describe a new one
+      if (gamesRequested.current++ < SAVED_STYLE_GAMES) url += "&savedStyle=1";
 
       const gameData = await fetchGame(url);
       if (gameData && isPreload) {

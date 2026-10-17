@@ -1,5 +1,5 @@
 import { generateWord, getRandomWord } from "./generate-word";
-import { generatePicture, type PictureDeps } from "./generate-picture";
+import { generatePicture, type PictureDeps, type PictureOptions } from "./generate-picture";
 import type { Contact } from "@/lib/game/contact-info";
 
 export interface WordAndPictureDeps extends PictureDeps {
@@ -23,7 +23,8 @@ export async function generateWordAndPictureUntilSuccess(
   topicParam: string | null,
   score: number,
   language: string,
-  deps: WordAndPictureDeps
+  deps: WordAndPictureDeps,
+  pictureOptions: PictureOptions = {}
 ): Promise<WordAndPictureResult> {
   let success = false;
   let alreadyShownToday = false;
@@ -63,7 +64,7 @@ export async function generateWordAndPictureUntilSuccess(
         }
       }
 
-      ({ picture, contact } = await generatePicture(word, language, deps));
+      ({ picture, contact } = await generatePicture(word, language, deps, pictureOptions));
       success = true;
     } catch (error) {
       const msg = error instanceof Error ? error.message : "";

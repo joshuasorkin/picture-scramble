@@ -66,6 +66,15 @@ createdAt: Date
 - At most 6 images per word (`MAX_IMAGES_PER_WORD`)
 - AI generation stops once a word is full; an upload to a full word evicts the oldest non-uploaded image
 
+### ArtStyle
+```
+style: string                 # gpt-6-luna's description of the art made at a time and place
+coordinates: string           # "lat, lon" it was asked about
+year: number                  # negative = BCE
+createdAt: Date
+```
+- Every new description is saved; the first games a player waits on reuse a random saved one (see New Game Flow)
+
 ### Contact (Zod schema, embedded)
 ```
 name?: string
@@ -93,7 +102,7 @@ Image.objects[].contact ---> Contact (embedded)
 3. `generateWordAndPictureUntilSuccess()` finds or generates a word + image
    - Checks DB for existing word not shown today
    - For a word with stored images, `pickImage()` chooses one (uploads first) and its R2 URL is returned; an extra generated image is made in the background unless the word is full
-   - Otherwise generates a new image, stores it in R2 and returns its R2 URL
+   - Otherwise generates a new image, stores it in R2 and returns its R2 URL. Its art style comes from a new gpt-6-luna description of a random time and place, saved as an `ArtStyle`; with `savedStyle=1` a random saved `ArtStyle` is reused instead, saving that call (falls back to a new description when none are saved)
    - Falls back to OpenAI generation with retry loop
    - After 3 repeats of words shown today, picks random word from local wordlist
    - Gives up and returns 500 after 3 unexpected errors (e.g. OpenAI failures) or 20 attempts in total, so a broken image model can't make a request spin
@@ -140,6 +149,7 @@ Image.objects[].contact ---> Contact (embedded)
 - Client maintains a queue of 6 pre-fetched games via `usePreloadGames`
 - Next game loads instantly from queue; queue refills in background
 - Each queued game's picture URL is loaded once up front so the browser has it cached
+- The first 3 requests of a page load (the first game and the 2 preloaded with it) send `savedStyle=1`, since a player may be waiting on them and a new style description adds several seconds to a new image
 
 ---
 
@@ -222,6 +232,8 @@ Image.objects[].contact ---> Contact (embedded)
 - **`gpt-6-luna`:** word generation, compliment generation (`CHAT_MODEL` in `client.ts`), with `reasoning_effort: "none"` for speed. Without that, reasoning tokens use up the small `max_completion_tokens` budget and the answer comes back empty. Replaced `gpt-3.5-turbo`, which OpenAI shut down on 23 October 2026
 - **Word generation asks for a list of 20 and `pickWord()` picks one at random** (single words of 4 to `WORD_LENGTH_MAX` letters). Current models answer "a random word" with the same word nearly every time (e.g. "lantern" 8 out of 8), and raising temperature does not help
 - **`gpt-image-2.5-flare`:** image generation for new words (1024×1024, medium quality, WebP; about $0.013 and 10–13 s per image in October 2026). It returns image data rather than a URL, so images are stored in R2 before being served. DALL-E 3 was shut down by OpenAI on 12 May 2026
+- **Art style comes from a random time and place.** Asked for "a random historical art style", the image model always drew muted European old-master paintings. Instead `randomArtOrigin()` (`src/lib/game/art-style.ts`) picks a populated place from `src/data/places.json` (Natural Earth, weighted by √population, jittered ~55 km) and a year from 5000 BCE to now (weighted towards recent eras). `describeArtStyle()` asks `gpt-6-luna` (`reasoning_effort: "low"`) what art was made there and then, and the answer goes into the image prompt. The image model can't place coordinates itself: given them directly, it drew Mediterranean scenes for places like Australia and Patagonia. Each description is saved as an `ArtStyle` for reuse. If the description fails, a fixed `ART_STYLES` list is the fallback. The extra call brings a new image to about 20–30 s. Rebuild the places file with `scripts/build-places.mjs`
+- Image prompts ask for vivid color, the word as the clear main subject, and pictures suitable for all ages. OpenAI's output moderation occasionally blocks an image (e.g. nude figures in some traditions); that counts as one of the retry loop's 3 unexpected errors
 - Prompts stored in environment variables with `topic` and `language` placeholders
 - Configurable timeouts and retry counts via env vars
 
@@ -239,7 +251,7 @@ Image.objects[].contact ---> Contact (embedded)
 
 | Method | Route                | Purpose                          |
 |--------|---------------------|----------------------------------|
-| GET    | `/api/new-game`     | Generate and return a new game   |
+| GET    | `/api/new-game`     | Generate and return a new game (`score`, `lang`, `topic`, `savedStyle=1` to reuse a saved art style) |
 | GET    | `/api/check-game`   | Verify player's answer           |
 | POST   | `/api/upload`       | Accept user-submitted images     |
 | GET    | `/api/default-contact` | Fetch default artist contact  |

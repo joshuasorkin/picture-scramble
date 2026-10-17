@@ -1,5 +1,8 @@
 import { getOpenAIClient } from "./client";
+import { describeArtStyle } from "./describe-art-style";
+import { formatYear, randomArtOrigin, type ArtOrigin, type Place } from "@/lib/game/art-style";
 import type { Contact } from "@/lib/game/contact-info";
+import places from "@/data/places.json";
 
 export interface ExistingPicture {
   picture: string;
@@ -22,12 +25,19 @@ export interface PictureDeps {
     buffer?: Buffer | null,
     uploaded?: boolean
   ) => Promise<string | null>;
+  saveArtStyle: (style: string, origin: ArtOrigin) => Promise<void>;
+  getRandomSavedArtStyle: () => Promise<string | null>;
+}
+
+export interface PictureOptions {
+  // Reuse a saved art style instead of waiting for a new description, for
+  // the games a player waits on when they first arrive
+  savedStyle?: boolean;
 }
 
 const IMAGE_MODEL = "gpt-image-2.5-flare";
 
-// Asked for "a random historical art style", the model always picks the same
-// muted European old-master look, so the style is chosen here instead
+// Fallback styles for when the time-and-place style can't be described
 export const ART_STYLES = [
   "an ancient Egyptian tomb painting, with flat figures in ochre, turquoise and lapis blue",
   "a Roman mosaic of small glossy tiles in bold colors",
@@ -58,23 +68,49 @@ export const ART_STYLES = [
 ];
 
 export function buildPicturePrompt(word: string, style: string): string {
-  return `Generate a picture of ${word}, in the style of ${style}. Use vivid, saturated colors; avoid muted or dingy tones. Do not include the word '${word}' in the picture. Do not include any text in the picture.`;
+  const styleSentence = /[.!]$/.test(style) ? style : `${style}.`;
+  return `Generate a picture of ${word}, with the ${word} clearly the main subject. Art style: ${styleSentence} Use vivid, saturated colors; avoid muted or dingy tones. Keep the picture suitable for all ages, with any people fully clothed. Do not include the word '${word}' in the picture. Do not include any text in the picture.`;
 }
 
 function randomArtStyle(): string {
   return ART_STYLES[Math.floor(Math.random() * ART_STYLES.length)] ?? ART_STYLES[0]!;
 }
 
+async function chooseArtStyle(deps: PictureDeps, savedStyle: boolean): Promise<string> {
+  if (savedStyle) {
+    const saved = await deps.getRandomSavedArtStyle().catch((err) => {
+      console.error("Error loading a saved art style:", err);
+      return null;
+    });
+    if (saved) return saved;
+  }
+
+  const origin = randomArtOrigin(places as Place[]);
+  try {
+    const style = await describeArtStyle(origin);
+    console.log(`Art style for ${origin.coordinates}, ${formatYear(origin.year)}: ${style}`);
+    // Saving is best effort and must not hold up the picture
+    deps.saveArtStyle(style, origin).catch((err) => {
+      console.error("Error saving art style:", err);
+    });
+    return style;
+  } catch (err) {
+    console.error("Error describing art style, using a fallback:", err);
+    return randomArtStyle();
+  }
+}
+
 export async function generateAndStorePicture(
   word: string,
   language: string,
-  deps: PictureDeps
+  deps: PictureDeps,
+  { savedStyle = false }: PictureOptions = {}
 ): Promise<string> {
   const client = getOpenAIClient();
 
   const response = await client.images.generate({
     model: IMAGE_MODEL,
-    prompt: buildPicturePrompt(word, randomArtStyle()),
+    prompt: buildPicturePrompt(word, await chooseArtStyle(deps, savedStyle)),
     n: 1,
     size: "1024x1024",
     quality: "medium",
@@ -103,7 +139,8 @@ export async function generateAndStorePicture(
 export async function generatePicture(
   word: string,
   language: string,
-  deps: PictureDeps
+  deps: PictureDeps,
+  options: PictureOptions = {}
 ): Promise<PictureResult> {
   const existingPicture = await deps.findExistingPicture(word);
 
@@ -120,6 +157,6 @@ export async function generatePicture(
     };
   }
 
-  const picture = await generateAndStorePicture(word, language, deps);
+  const picture = await generateAndStorePicture(word, language, deps, options);
   return { picture, contact: null };
 }

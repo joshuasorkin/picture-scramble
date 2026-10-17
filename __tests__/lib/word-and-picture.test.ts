@@ -26,6 +26,8 @@ describe("generateWordAndPictureUntilSuccess", () => {
     wordGeneratedToday: vi.fn(),
     findExistingPicture: vi.fn(),
     storeImage: vi.fn(),
+    saveArtStyle: vi.fn(),
+    getRandomSavedArtStyle: vi.fn(),
   };
 
   beforeEach(() => {
@@ -49,6 +51,15 @@ describe("generateWordAndPictureUntilSuccess", () => {
     expect(result.picture).toBe("http://example.com/pic.png");
     expect(result.contact).toBeNull();
     expect(mockDeps.getRandomWordByLanguage).toHaveBeenCalledWith("English");
+  });
+
+  it("passes the saved style option through to picture generation", async () => {
+    mockDeps.getRandomWordByLanguage.mockResolvedValue("hello");
+    mockDeps.wordGeneratedToday.mockResolvedValue(false);
+
+    await generateWordAndPictureUntilSuccess(null, 0, "English", mockDeps, { savedStyle: true });
+
+    expect(generatePicture).toHaveBeenCalledWith("hello", "English", mockDeps, { savedStyle: true });
   });
 
   it("retries when word was shown today", async () => {

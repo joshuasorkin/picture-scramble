@@ -10,11 +10,14 @@ import { Game } from "@/lib/db/models/game";
 import { getRandomWordByLanguage, wordGeneratedToday } from "@/lib/game/word-queries";
 import { createImageStore } from "@/lib/game/image-store";
 import { getImageStorage } from "@/lib/storage/r2";
+import { getRandomSavedArtStyle, saveArtStyle } from "@/lib/game/art-style-queries";
 
 const querySchema = z.object({
   topic: z.string().optional(),
   lang: z.string().optional(),
   score: z.coerce.number().default(0),
+  // Set by the client on the first games it requests, which a player waits on
+  savedStyle: z.string().optional(),
 });
 
 export async function GET(request: NextRequest) {
@@ -26,6 +29,7 @@ export async function GET(request: NextRequest) {
       topic: searchParams.get("topic") ?? undefined,
       lang: searchParams.get("lang") ?? undefined,
       score: searchParams.get("score") ?? 0,
+      savedStyle: searchParams.get("savedStyle") ?? undefined,
     });
 
     const language = params.lang ?? process.env.DEFAULT_LANGUAGE ?? "English";
@@ -34,6 +38,8 @@ export async function GET(request: NextRequest) {
     const deps = {
       getRandomWordByLanguage,
       wordGeneratedToday,
+      saveArtStyle,
+      getRandomSavedArtStyle,
       ...createImageStore(getImageStorage()),
     };
 
@@ -41,7 +47,8 @@ export async function GET(request: NextRequest) {
       topicParam,
       params.score,
       language,
-      deps
+      deps,
+      { savedStyle: params.savedStyle === "1" }
     );
 
     const word = wordAndPicture.word;
