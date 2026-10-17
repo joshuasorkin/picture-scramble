@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { generatePicture } from "@/lib/openai/generate-picture";
+import { ART_STYLES, generatePicture } from "@/lib/openai/generate-picture";
 
 const generate = vi.fn();
 
@@ -31,6 +31,17 @@ describe("generatePicture", () => {
       expect.objectContaining({ model: "gpt-image-2.5-flare", quality: "medium" })
     );
     expect(deps.storeImage).toHaveBeenCalledWith("apple", null, "English", imageData);
+  });
+
+  it("asks for one of the listed art styles in vivid color", async () => {
+    deps.findExistingPicture.mockResolvedValue(null);
+
+    await generatePicture("apple", "English", deps);
+
+    const prompt: string = generate.mock.calls[0]?.[0].prompt;
+    expect(ART_STYLES.some((style) => prompt.includes(style))).toBe(true);
+    expect(prompt).toMatch(/vivid, saturated colors/);
+    expect(prompt).toMatch(/apple/);
   });
 
   it("throws when the generated picture cannot be stored", async () => {
