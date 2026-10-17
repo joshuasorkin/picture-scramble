@@ -202,6 +202,38 @@ describe("getStats", () => {
     });
   });
 
+  it("counts shares, shared puzzles played and visits from share links", async () => {
+    const original = await createGame({
+      visitorId: "a",
+      date_start: new Date("2026-10-14T09:00:00Z"),
+      shareCount: 2,
+    });
+    await Promise.all([
+      createVisit("a", "2026-10-14T08:59:00Z"),
+      // b opens the link the next day and shares it on once
+      Visit.create({
+        visitorId: "b",
+        startedAt: new Date("2026-10-15T12:00:00Z"),
+        lastSeenAt: new Date("2026-10-15T12:00:00Z"),
+        utmSource: "share",
+      }),
+      createGame({
+        visitorId: "b",
+        date_start: new Date("2026-10-15T12:00:01Z"),
+        sharedFrom: original.id,
+        shareCount: 1,
+      }),
+      // A copy that was made but never shown isn't counted
+      createGame({ sharedFrom: original.id }),
+    ]);
+
+    const stats = await getStats("2026-10-14", "2026-10-15", "UTC");
+
+    expect(stats.days[0]).toMatchObject({ shares: 2, sharedPlayed: 0, shareVisits: 0 });
+    expect(stats.days[1]).toMatchObject({ shares: 1, sharedPlayed: 1, shareVisits: 1 });
+    expect(stats.total).toMatchObject({ shares: 3, sharedPlayed: 1, shareVisits: 1 });
+  });
+
   it("buckets days in the requested timezone", async () => {
     // 03:00 UTC on the 15th is the evening of the 14th in Los Angeles
     await createVisit("a", "2026-10-15T03:00:00Z");

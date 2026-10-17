@@ -98,7 +98,7 @@ export default function DailyChart({ days }: { days: DayStatsRow[] }) {
               aria-pressed={m.key === metric.key}
               onClick={() => setMetric(m)}
             >
-              {m.key === "visitors" ? "Visitors" : m.label.replace(" per visitor", "")}
+              {m.tab}
             </button>
           ))}
         </div>

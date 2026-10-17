@@ -48,6 +48,24 @@ export default function StatsDashboard({ stats, statsKey, error }: Props) {
         </div>
       </section>
 
+      <section className="stats-tiles stats-tiles-3" aria-label="Sharing totals for the range">
+        <div className="stats-card stats-tile">
+          <span className="stats-tile-label">Shares</span>
+          <span className="stats-tile-value">{formatCount(total.shares)}</span>
+          <span className="stats-muted">taps of the Share button</span>
+        </div>
+        <div className="stats-card stats-tile">
+          <span className="stats-tile-label">Shared puzzles played</span>
+          <span className="stats-tile-value">{formatCount(total.sharedPlayed)}</span>
+          <span className="stats-muted">opened from a share link</span>
+        </div>
+        <div className="stats-card stats-tile">
+          <span className="stats-tile-label">Visits from share links</span>
+          <span className="stats-tile-value">{formatCount(total.shareVisits)}</span>
+          <span className="stats-muted">visits that started on a share link</span>
+        </div>
+      </section>
+
       {total.visitors === 0 ? (
         <p className="stats-card stats-subtle">No visits recorded in this range yet.</p>
       ) : (
@@ -65,6 +83,9 @@ export default function StatsDashboard({ stats, statsKey, error }: Props) {
                 <th scope="col">Visits / visitor</th>
                 <th scope="col">Played / visitor</th>
                 <th scope="col">Solved / visitor</th>
+                <th scope="col">Shares</th>
+                <th scope="col">Shared played</th>
+                <th scope="col">Share visits</th>
               </tr>
             </thead>
             <tbody>
@@ -75,6 +96,9 @@ export default function StatsDashboard({ stats, statsKey, error }: Props) {
                   <td className={d.visitors ? "" : "zero"}>{formatAverage(d.visitsPerVisitor)}</td>
                   <td className={d.visitors ? "" : "zero"}>{formatAverage(d.roundsPerVisitor)}</td>
                   <td className={d.visitors ? "" : "zero"}>{formatAverage(d.solvedPerVisitor)}</td>
+                  <td className={d.shares ? "" : "zero"}>{formatCount(d.shares)}</td>
+                  <td className={d.sharedPlayed ? "" : "zero"}>{formatCount(d.sharedPlayed)}</td>
+                  <td className={d.shareVisits ? "" : "zero"}>{formatCount(d.shareVisits)}</td>
                 </tr>
               ))}
             </tbody>
@@ -85,6 +109,9 @@ export default function StatsDashboard({ stats, statsKey, error }: Props) {
                 <td>{formatAverage(total.visitsPerVisitor)}</td>
                 <td>{formatAverage(total.roundsPerVisitor)}</td>
                 <td>{formatAverage(total.solvedPerVisitor)}</td>
+                <td>{formatCount(total.shares)}</td>
+                <td>{formatCount(total.sharedPlayed)}</td>
+                <td>{formatCount(total.shareVisits)}</td>
               </tr>
             </tfoot>
           </table>
@@ -94,6 +121,7 @@ export default function StatsDashboard({ stats, statsKey, error }: Props) {
       <p className="stats-muted">
         A visit ends after 30 minutes without activity. A puzzle counts as played once it is
         shown. Visitors in the whole-range row are counted once, so it is not the sum of the days.
+        Shares count on the day the shared puzzle was played, since each tap isn&apos;t timestamped.
       </p>
     </main>
   );

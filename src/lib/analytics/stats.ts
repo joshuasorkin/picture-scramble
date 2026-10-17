@@ -7,6 +7,9 @@ export interface StatsRow {
   visits: number;
   rounds: number;
   solved: number;
+  shares: number;
+  sharedPlayed: number;
+  shareVisits: number;
   visitsPerVisitor: number;
   roundsPerVisitor: number;
   solvedPerVisitor: number;
@@ -29,9 +32,20 @@ interface Counts {
   visits: number;
   rounds: number;
   solved: number;
+  shares: number; // Share taps on rounds shown that day
+  sharedPlayed: number; // rounds opened from a share link
+  shareVisits: number; // visits that landed on a share link
 }
 
-const EMPTY: Counts = { visitors: 0, visits: 0, rounds: 0, solved: 0 };
+const EMPTY: Counts = {
+  visitors: 0,
+  visits: 0,
+  rounds: 0,
+  solved: 0,
+  shares: 0,
+  sharedPlayed: 0,
+  shareVisits: 0,
+};
 
 function withAverages(counts: Counts): StatsRow {
   const per = (n: number) => (counts.visitors ? n / counts.visitors : 0);
@@ -48,6 +62,9 @@ const countsGroup = {
   visits: { $sum: "$visit" },
   rounds: { $sum: "$round" },
   solved: { $sum: "$solved" },
+  shares: { $sum: "$shares" },
+  sharedPlayed: { $sum: "$sharedPlayed" },
+  shareVisits: { $sum: "$shareVisit" },
 };
 
 const countsProjection = {
@@ -56,12 +73,16 @@ const countsProjection = {
   visits: 1,
   rounds: 1,
   solved: 1,
+  shares: 1,
+  sharedPlayed: 1,
+  shareVisits: 1,
 };
 
-// Visitors, visits, rounds and solves for each day from `from` to `to`
-// (inclusive, YYYY-MM-DD in `timezone`). A visitor is anyone with a visit or
-// a round that day. Visits count on the day they start; rounds and their
-// solves count on the day the round was shown.
+// Visitors, visits, rounds, solves and shares for each day from `from` to
+// `to` (inclusive, YYYY-MM-DD in `timezone`). A visitor is anyone with a visit
+// or a round that day. Visits count on the day they start; rounds and their
+// solves and shares count on the day the round was shown (share taps have no
+// timestamp of their own).
 export async function getStats(
   from: string,
   to: string,
@@ -86,6 +107,9 @@ export async function getStats(
         visit: { $literal: 1 },
         round: { $literal: 0 },
         solved: { $literal: 0 },
+        shares: { $literal: 0 },
+        sharedPlayed: { $literal: 0 },
+        shareVisit: { $cond: [{ $eq: ["$utmSource", "share"] }, 1, 0] },
       },
     },
     {
@@ -100,6 +124,9 @@ export async function getStats(
               visit: { $literal: 0 },
               round: { $literal: 1 },
               solved: { $cond: [{ $ifNull: ["$date_solve", false] }, 1, 0] },
+              shares: { $ifNull: ["$shareCount", 0] },
+              sharedPlayed: { $cond: [{ $ifNull: ["$sharedFrom", false] }, 1, 0] },
+              shareVisit: { $literal: 0 },
             },
           },
         ],
@@ -133,8 +160,12 @@ export async function getStats(
     timezone,
     total: withAverages(result?.total[0] ?? EMPTY),
     days: daysInRange(from, to).map((date) => {
-      const { visitors, visits, rounds, solved } = byDay.get(date) ?? EMPTY;
-      return { date, ...withAverages({ visitors, visits, rounds, solved }) };
+      const { visitors, visits, rounds, solved, shares, sharedPlayed, shareVisits } =
+        byDay.get(date) ?? EMPTY;
+      return {
+        date,
+        ...withAverages({ visitors, visits, rounds, solved, shares, sharedPlayed, shareVisits }),
+      };
     }),
   };
 }
