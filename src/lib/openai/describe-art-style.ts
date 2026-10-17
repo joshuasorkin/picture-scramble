@@ -11,7 +11,7 @@ export async function describeArtStyle({ coordinates, year }: ArtOrigin): Promis
     messages: [
       {
         role: "user",
-        content: `What art style would typically be employed at the GPS coordinates ${coordinates} in the year ${formatYear(year)}? If almost no one lived there then, or no art from that time and place survives, use the closest culture that did make art. Reply with one sentence an image generator can follow: the culture, the medium, and the characteristic colors, forms and motifs. Do not mention the coordinates or year.`,
+        content: `What art style would typically be employed at the GPS coordinates ${coordinates} in the year ${formatYear(year)}? If almost no one lived there then, or no art from that time and place survives, use the closest culture that did make art. Choose the most colorful, visually striking medium that culture used, such as painting, murals, textiles, beadwork, featherwork, lacquer, tilework, enamel or painted carving; only choose pottery if the culture made no more colorful art. Reply with one sentence an image generator can follow: the culture, the medium, and the characteristic colors, forms and motifs. Do not mention the coordinates or year.`,
       },
     ],
     // Placing the coordinates needs some reasoning; the reply itself is short
