@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { connectToDatabase } from "@/lib/db/connection";
 import { getStats } from "@/lib/analytics/stats";
+import { getRetention } from "@/lib/analytics/retention";
 import { isStatsKey, parseStatsRange } from "@/lib/analytics/stats-range";
 import StatsDashboard from "@/components/stats/StatsDashboard";
 import "./stats.css";
@@ -36,11 +37,14 @@ export default async function StatsPage({ searchParams }: { searchParams: Search
     : requested.error.issues.map((i) => i.message).join("; ");
 
   await connectToDatabase();
-  const stats = await getStats(range.from, range.to, range.timezone);
+  const [stats, retention] = await Promise.all([
+    getStats(range.from, range.to, range.timezone),
+    getRetention(range.from, range.to, range.timezone),
+  ]);
 
   return (
     <div className="stats-root">
-      <StatsDashboard stats={stats} statsKey={key!} error={error} />
+      <StatsDashboard stats={stats} retention={retention} statsKey={key!} error={error} />
     </div>
   );
 }

@@ -268,7 +268,7 @@ Image.objects[].contact ---> Contact (embedded)
 | GET    | `/api/default-contact` | Fetch default artist contact  |
 | GET    | `/api/shared-game`  | Copy a shared game into a new game for the receiver |
 | POST   | `/api/game-event`   | Record visit / round start / client-side solve / share / hide / skip |
-| GET    | `/api/stats`        | Visitor/visit/round stats as JSON (needs `STATS_KEY`) |
+| GET    | `/api/stats`        | Visitor/visit/round stats and return-rate cohorts (`retention`) as JSON (needs `STATS_KEY`) |
 | GET    | `/stats`            | Stats dashboard page (needs `STATS_KEY`) |
 
 ---
@@ -286,7 +286,7 @@ The product goal is more active users: bring new players in, keep them past the 
 
 | # | KPI | Definition | Data | Status |
 |---|-----|------------|------|--------|
-| 1 | Return rate (D1 / D7 / D30) | Of visitors whose first day is D, the share with any visit on day D+1, within D+1..D+7, and within D+1..D+30. Shown as cohort rows by first day; a cohort's figure stays blank until its window has fully passed | Existing `visits` | planned |
+| 1 | Return rate (D1 / D7 / D30) | Of visitors whose first day is D, the share with any visit on day D+1, within D+1..D+7, and within D+1..D+30. Shown as cohort rows by first day; a cohort's figure stays blank until its window has fully passed | Existing `visits` | done |
 | 2 | New vs. returning visitors | Per day: visitors whose first day is that day vs. all other visitors that day | Existing `visits` | planned |
 | 3 | Bounce rate and time to first puzzle | Bounce rate: share of visits with no round. Time to first puzzle: time from a visit's start to its first round's `date_start` (median and p90) | Existing for bounce rate; time to first puzzle needs a first-round marker per visit, or the client to report load time | planned |
 | 4 | First-visit funnel | For visitors on their first visit: share reaching each step: landed, 1st puzzle shown, 1st solve, 2nd puzzle, 5th puzzle | Rounds and solves per visit (`Game.visitId`); landed = `Visit` exists | planned |

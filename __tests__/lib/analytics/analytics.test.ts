@@ -13,6 +13,7 @@ import {
 import { reportedSeconds } from "@/lib/analytics/reported-seconds";
 import { touchVisit, VISIT_TIMEOUT_MS } from "@/lib/analytics/visits";
 import { getStats } from "@/lib/analytics/stats";
+import { getRetention } from "@/lib/analytics/retention";
 
 function createGame(fields: Record<string, unknown> = {}) {
   return Game.create({
@@ -254,5 +255,92 @@ describe("getStats", () => {
 
     const stats = await getStats("2026-10-13", "2026-10-15", "UTC");
     expect(stats.total.visitors).toBe(1);
+  });
+});
+
+describe("getRetention", () => {
+  const now = new Date("2026-11-30T12:00:00Z");
+
+  it("counts returns the next day, within 7 days and within 30 days", async () => {
+    await Promise.all([
+      // a: first day Oct 1, back Oct 2 (counts for D1, D7 and D30)
+      createVisit("a", "2026-10-01T10:00:00Z"),
+      createVisit("a", "2026-10-02T10:00:00Z"),
+      // b: back Oct 8 only (D7 and D30, not D1)
+      createVisit("b", "2026-10-01T11:00:00Z"),
+      createVisit("b", "2026-10-08T11:00:00Z"),
+      // c: back Oct 31 only (D30)
+      createVisit("c", "2026-10-01T12:00:00Z"),
+      createVisit("c", "2026-10-31T12:00:00Z"),
+      // d: a second visit the same day and one on Nov 1 (neither counts)
+      createVisit("d", "2026-10-01T13:00:00Z"),
+      createVisit("d", "2026-10-01T20:00:00Z"),
+      createVisit("d", "2026-11-01T13:00:00Z"),
+    ]);
+
+    const retention = await getRetention("2026-10-01", "2026-10-02", "UTC", now);
+
+    expect(retention.cohorts.map((c) => c.date)).toEqual(["2026-10-01", "2026-10-02"]);
+    expect(retention.cohorts[0]).toEqual({
+      date: "2026-10-01",
+      visitors: 4,
+      d1: { visitors: 4, returned: 1, rate: 0.25 },
+      d7: { visitors: 4, returned: 2, rate: 0.5 },
+      d30: { visitors: 4, returned: 3, rate: 0.75 },
+    });
+    // a's return visit on Oct 2 doesn't make a new visitor
+    expect(retention.cohorts[1]).toMatchObject({ visitors: 0, d1: { visitors: 0, rate: 0 } });
+    expect(retention.total.d30).toEqual({ visitors: 4, returned: 3, rate: 0.75 });
+  });
+
+  it("uses each visitor's first day over all time", async () => {
+    await Promise.all([
+      createVisit("old", "2026-09-01T10:00:00Z"),
+      createVisit("old", "2026-10-10T10:00:00Z"),
+      createVisit("new", "2026-10-10T10:00:00Z"),
+    ]);
+
+    const retention = await getRetention("2026-10-10", "2026-10-10", "UTC", now);
+    expect(retention.cohorts[0]?.visitors).toBe(1);
+  });
+
+  it("leaves a figure blank until its window has fully passed", async () => {
+    await Promise.all([
+      createVisit("a", "2026-11-20T10:00:00Z"),
+      createVisit("a", "2026-11-21T10:00:00Z"),
+      createVisit("b", "2026-11-29T10:00:00Z"),
+    ]);
+
+    const retention = await getRetention("2026-11-20", "2026-11-29", "UTC", now);
+    const nov20 = retention.cohorts[0]!;
+    const nov29 = retention.cohorts[9]!;
+
+    // Nov 20: D+1 and D+7 are past, D+30 is not
+    expect(nov20.d1).toMatchObject({ returned: 1 });
+    expect(nov20.d7).toMatchObject({ returned: 1 });
+    expect(nov20.d30).toBeNull();
+    // Nov 29: D+1 is today, so not yet complete
+    expect(nov29).toMatchObject({ visitors: 1, d1: null, d7: null, d30: null });
+
+    // Totals pool only complete cohorts: b's cohort isn't in D1 yet
+    expect(retention.total.d1).toEqual({ visitors: 1, returned: 1, rate: 1 });
+    expect(retention.total.d30).toBeNull();
+  });
+
+  it("uses local days in the requested timezone", async () => {
+    // 03:00 UTC is the previous evening in Los Angeles, and 20:00 UTC is the
+    // same day there, so the second visit is next-day in LA but not in UTC
+    await Promise.all([
+      createVisit("a", "2026-10-15T03:00:00Z"),
+      createVisit("a", "2026-10-15T20:00:00Z"),
+    ]);
+
+    const utc = await getRetention("2026-10-14", "2026-10-15", "UTC", now);
+    const la = await getRetention("2026-10-14", "2026-10-15", "America/Los_Angeles", now);
+
+    expect(utc.cohorts.map((c) => c.visitors)).toEqual([0, 1]);
+    expect(utc.total.d1).toMatchObject({ returned: 0 });
+    expect(la.cohorts.map((c) => c.visitors)).toEqual([1, 0]);
+    expect(la.total.d1).toMatchObject({ returned: 1 });
   });
 });
