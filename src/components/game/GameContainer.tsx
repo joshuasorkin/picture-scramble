@@ -7,13 +7,13 @@ import GameImage from "./GameImage";
 import GameMessage from "./GameMessage";
 import ShareButton from "./ShareButton";
 import TileRack from "./TileRack";
-import ContactModal from "./ContactModal";
 import Footer from "./Footer";
+import HelpModal from "./HelpModal";
 
 export default function GameContainer() {
   const { state, startNewGame, submitGuess, checkAutoSubmit, skipGame, shareGame } =
     useGame();
-  const [contactOpen, setContactOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const [rackString, setRackString] = useState("");
   const imageRef = useRef<HTMLImageElement>(null);
   const hasStarted = useRef(false);
@@ -107,17 +107,12 @@ export default function GameContainer() {
         score={state.score}
         clock={state.clock}
         solveSeconds={state.solveSeconds}
-        onContactClick={() => setContactOpen(true)}
+        onHelpClick={() => setHelpOpen(true)}
         onSkipClick={skipGame}
         showSkip={isPlaying}
       />
 
-      <ContactModal
-        contact={state.contact}
-        defaultContactInfo={state.defaultContactInfo}
-        isOpen={contactOpen}
-        onClose={() => setContactOpen(false)}
-      />
+      <HelpModal isOpen={helpOpen} onClose={() => setHelpOpen(false)} />
     </div>
   );
 }

@@ -59,7 +59,28 @@ test.describe("Skip Button", () => {
   });
 });
 
-test.describe("Contact Modal", () => {
+test.describe("Help Modal", () => {
+  test("opens with instructions and closes via X or background", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.locator("#rack-container")).toBeVisible();
+    await expect(page.locator("#helpOverlay")).not.toBeVisible();
+
+    await page.getByRole("button", { name: "How to play" }).click();
+    const dialog = page.getByRole("dialog", { name: "How to play" });
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toContainText("Drag the tiles");
+
+    await page.locator("#helpCloseBtn").click();
+    await expect(page.locator("#helpOverlay")).not.toBeVisible();
+
+    await page.getByRole("button", { name: "How to play" }).click();
+    await page.locator("#helpOverlay").click({ position: { x: 5, y: 5 } });
+    await expect(page.locator("#helpOverlay")).not.toBeVisible();
+  });
+});
+
+// Skipped while the artist contact icon is removed from the footer (ContactModal is unused).
+test.describe.skip("Contact Modal", () => {
   test("opens and closes contact modal with correct info", async ({
     page,
   }) => {

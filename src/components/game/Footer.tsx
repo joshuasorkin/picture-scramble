@@ -1,5 +1,6 @@
 "use client";
 
+import HelpButton from "./HelpButton";
 import ScoreDisplay from "./ScoreDisplay";
 import SkipButton from "./SkipButton";
 import Timer from "./Timer";
@@ -9,7 +10,7 @@ interface FooterProps {
   score: number;
   clock: Clock | null;
   solveSeconds: number | null;
-  onContactClick: () => void;
+  onHelpClick: () => void;
   onSkipClick: () => void;
   showSkip: boolean;
 }
@@ -18,16 +19,13 @@ export default function Footer({
   score,
   clock,
   solveSeconds,
-  onContactClick,
+  onHelpClick,
   onSkipClick,
   showSkip,
 }: FooterProps) {
   return (
     <div id="footer">
-      <div id="linkedImageContainer" onClick={onContactClick}>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/contact.png" alt="Contact" />
-      </div>
+      <HelpButton onClick={onHelpClick} />
       <ScoreDisplay score={score}>
         <Timer clock={clock} solveSeconds={solveSeconds} />
       </ScoreDisplay>

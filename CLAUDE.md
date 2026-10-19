@@ -71,7 +71,9 @@ src/
 - [ ] Share button appears on solve; share sheet (phone) or "Link copied!" (desktop)
 - [ ] Shared link opens that puzzle first, keeps ?lang/?topic for later games, and drops ?puzzle from the URL
 - [ ] Skip button works
-- [ ] Contact modal opens/closes with correct info
+- [ ] No artist contact icon in the footer; skip button is a comfortable tap target on mobile
+- [ ] Help (?) button opens "How to play" modal; closes via X or tapping outside
+- [ ] Footer doesn't shift when the skip button hides after a solve
 - [ ] Preloading works (2nd game loads instantly)
 - [ ] Language via URL param works (?lang=Spanish)
 - [ ] Responsive layout on desktop (max-w-lg centered)
