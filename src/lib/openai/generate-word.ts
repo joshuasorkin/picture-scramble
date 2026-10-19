@@ -5,7 +5,8 @@ import path from "path";
 // Models answer "a random word" with the same word nearly every time, so ask
 // for a list and pick from it
 const WORD_LIST_SUFFIX =
-  " Instead of one word, respond with 20 different such words separated by commas, and nothing else.";
+  " Instead of one word, respond with 20 different such words separated by commas, and nothing else." +
+  " Use only real, correctly spelled, complete words. Never shorten or alter a word to fit the length; leave it out instead.";
 
 let wordListCache: string[] | null = null;
 
@@ -46,6 +47,31 @@ export function pickWord(
   const fresh = candidates.filter((w) => !avoided.has(w));
   const pool = fresh.length > 0 ? fresh : candidates;
   return pool[Math.floor(random() * pool.length)]!;
+}
+
+/**
+ * Ask the model whether a picked word is real. Without reasoning, the list
+ * reply sometimes holds made-up or truncated words ("actuateg", "kaleidosc").
+ */
+export async function isRealWord(
+  word: string,
+  language: string,
+  topic: string | null
+): Promise<boolean> {
+  const field = topic ? ` (a technical term in ${topic} counts)` : "";
+  const response = await getOpenAIClient().chat.completions.create({
+    model: CHAT_MODEL,
+    messages: [
+      {
+        role: "user",
+        content: `Is "${word}" a real, correctly spelled, complete ${language} word${field}? Answer only yes or no.`,
+      },
+    ],
+    max_completion_tokens: 10,
+    reasoning_effort: "none",
+  });
+  const answer = response.choices[0]?.message?.content ?? "";
+  return /^\W*yes\b/i.test(answer);
 }
 
 /**
@@ -104,13 +130,21 @@ export async function generateWord(
   const wordLengthMax = Number(process.env.WORD_LENGTH_MAX ?? 9);
   const content = response.choices[0]?.message?.content ?? "";
   const taken = [...avoid];
+  const fake: string[] = [];
   for (;;) {
-    const word = pickWord(content, wordLengthMax, Math.random, taken);
-    if (!word) {
+    const word = pickWord(content, wordLengthMax, Math.random, [...taken, ...fake]);
+    if (!word || fake.includes(word)) {
       throw new Error("No usable word in OpenAI response");
     }
     // A word that was already taken means every usable word is, so reuse it
-    if (!claim || taken.includes(word) || (await claim(word))) {
+    if (taken.includes(word)) {
+      return word;
+    }
+    if (!(await isRealWord(word, language, topicParam))) {
+      fake.push(word);
+      continue;
+    }
+    if (!claim || (await claim(word))) {
       return word;
     }
     taken.push(word);

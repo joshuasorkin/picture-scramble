@@ -11,6 +11,19 @@ vi.mock("@/lib/openai/client", () => ({
 
 const reply = (content: string) => ({ choices: [{ message: { content } }] });
 
+// Answer word list requests with `list`, and real-word checks with yes unless
+// the word is in `fake`
+function answer(list: string, fake: string[] = []) {
+  create.mockImplementation(async (request) => {
+    const content: string = request.messages[0].content;
+    const checked = content.match(/^Is "(.+?)" a real/)?.[1];
+    if (checked === undefined) {
+      return reply(list);
+    }
+    return reply(fake.includes(checked) ? "No." : "Yes.");
+  });
+}
+
 describe("chance", () => {
   beforeEach(() => {
     vi.stubEnv("EASY_GAMES_COUNT", "3");
@@ -88,7 +101,7 @@ describe("generateWord", () => {
   });
 
   it("asks for a list without reasoning and returns one word from it", async () => {
-    create.mockResolvedValue(reply("aerophone, fipple, diapason"));
+    answer("aerophone, fipple, diapason");
 
     const word = await generateWord("music", 0, "Spanish");
 
@@ -100,7 +113,7 @@ describe("generateWord", () => {
   });
 
   it("asks the model to avoid the given words and skips them", async () => {
-    create.mockResolvedValue(reply("routing, guardrail"));
+    answer("routing, guardrail");
 
     for (let i = 0; i < 5; i++) {
       expect(await generateWord("agents", 0, "English", ["routing"])).toBe("guardrail");
@@ -110,18 +123,19 @@ describe("generateWord", () => {
   });
 
   it("picks again when the claim fails because another game took the word", async () => {
-    create.mockResolvedValue(reply("routing, guardrail"));
+    answer("routing, guardrail");
     const claim = vi.fn(async (w: string) => w !== "routing");
 
     for (let i = 0; i < 5; i++) {
       expect(await generateWord("agents", 0, "English", [], claim)).toBe("guardrail");
     }
     expect(claim).toHaveBeenLastCalledWith("guardrail");
-    expect(create).toHaveBeenCalledTimes(5);
+    const lists = create.mock.calls.filter((c) => !c[0].messages[0].content.startsWith("Is "));
+    expect(lists).toHaveLength(5);
   });
 
   it("reuses a taken word when every usable word is taken", async () => {
-    create.mockResolvedValue(reply("routing, guardrail"));
+    answer("routing, guardrail");
     const claim = vi.fn().mockResolvedValue(false);
 
     expect(["routing", "guardrail"]).toContain(
@@ -130,8 +144,36 @@ describe("generateWord", () => {
     expect(claim).toHaveBeenCalledTimes(2);
   });
 
+  it("skips words the check says are not real", async () => {
+    answer("actuateg, actuator", ["actuateg"]);
+
+    for (let i = 0; i < 5; i++) {
+      expect(await generateWord("automation", 0, "English")).toBe("actuator");
+    }
+    const checks = create.mock.calls.map((c) => c[0].messages[0].content);
+    expect(checks).toContain(
+      'Is "actuateg" a real, correctly spelled, complete English word (a technical term in automation counts)? Answer only yes or no.'
+    );
+  });
+
+  it("throws when no word in the response is real", async () => {
+    answer("actuateg, nutslot", ["actuateg", "nutslot"]);
+
+    await expect(generateWord("music", 0, "English")).rejects.toThrow(/No usable word/);
+  });
+
+  it("checks a word before claiming it", async () => {
+    answer("nutslot, guardrail", ["nutslot"]);
+    const claim = vi.fn().mockResolvedValue(true);
+
+    for (let i = 0; i < 5; i++) {
+      expect(await generateWord("agents", 0, "English", [], claim)).toBe("guardrail");
+    }
+    expect(claim).not.toHaveBeenCalledWith("nutslot");
+  });
+
   it("throws when the response has no usable word", async () => {
-    create.mockResolvedValue(reply("hi, extraordinarily"));
+    answer("hi, extraordinarily");
 
     await expect(generateWord("music", 0, "English")).rejects.toThrow(/No usable word/);
   });
