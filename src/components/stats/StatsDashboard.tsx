@@ -1,18 +1,21 @@
 import type { Stats } from "@/lib/analytics/stats";
 import type { Retention } from "@/lib/analytics/retention";
+import type { SourceRow } from "@/lib/analytics/sources";
 import DailyChart from "./DailyChart";
 import RangeControls from "./RangeControls";
 import RetentionTable from "./RetentionTable";
+import SourcesTable from "./SourcesTable";
 import { formatAverage, formatCount, formatDay } from "./format";
 
 interface Props {
   stats: Stats;
   retention: Retention;
+  sources: SourceRow[];
   statsKey: string;
   error?: string;
 }
 
-export default function StatsDashboard({ stats, retention, statsKey, error }: Props) {
+export default function StatsDashboard({ stats, retention, sources, statsKey, error }: Props) {
   const { total, days, from, to, timezone } = stats;
   const newestFirst = [...days].reverse();
 
@@ -123,13 +126,16 @@ export default function StatsDashboard({ stats, retention, statsKey, error }: Pr
 
       <RetentionTable retention={retention} />
 
+      <SourcesTable sources={sources} />
+
       <p className="stats-muted">
         A visit ends after 30 minutes without activity. A puzzle counts as played once it is
         shown. Visitors in the whole-range row are counted once, so it is not the sum of the days.
         Shares count on the day the shared puzzle was played, since each tap isn&apos;t timestamped.
         Return rates group new visitors by the day of their first ever visit; D1 means a visit the
         next day, D7 and D30 a visit on any of the next 7 or 30 days. A figure shows … until its
-        window has fully passed.
+        window has fully passed. A visit&apos;s source is its utm_source, otherwise the site that
+        linked to it; a visitor who came from several sources counts under each.
       </p>
     </main>
   );

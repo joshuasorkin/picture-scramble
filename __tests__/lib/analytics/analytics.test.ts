@@ -14,6 +14,7 @@ import { reportedSeconds } from "@/lib/analytics/reported-seconds";
 import { touchVisit, VISIT_TIMEOUT_MS } from "@/lib/analytics/visits";
 import { getStats } from "@/lib/analytics/stats";
 import { getRetention } from "@/lib/analytics/retention";
+import { getSources } from "@/lib/analytics/sources";
 
 function createGame(fields: Record<string, unknown> = {}) {
   return Game.create({
@@ -342,5 +343,50 @@ describe("getRetention", () => {
     expect(utc.total.d1).toMatchObject({ returned: 0 });
     expect(la.cohorts.map((c) => c.visitors)).toEqual([1, 0]);
     expect(la.total.d1).toMatchObject({ returned: 1 });
+  });
+});
+
+describe("getSources", () => {
+  function createSourceVisit(visitorId: string, startedAt: string, source: object = {}) {
+    const at = new Date(startedAt);
+    return Visit.create({ visitorId, startedAt: at, lastSeenAt: at, ...source });
+  }
+
+  it("groups visits and their rounds by utm_source, then referrer, then direct", async () => {
+    const [reddit1, reddit2, , direct] = await Promise.all([
+      createSourceVisit("a", "2026-10-14T09:00:00Z", { utmSource: "reddit", referrer: "www.reddit.com" }),
+      createSourceVisit("b", "2026-10-14T10:00:00Z", { utmSource: "reddit" }),
+      createSourceVisit("c", "2026-10-14T11:00:00Z", { referrer: "news.ycombinator.com" }),
+      createSourceVisit("a", "2026-10-15T09:00:00Z"),
+    ]);
+    await Promise.all([
+      createGame({ visitorId: "a", visitId: reddit1.id, date_start: new Date("2026-10-14T09:01:00Z"), date_solve: new Date() }),
+      createGame({ visitorId: "a", visitId: reddit1.id, date_start: new Date("2026-10-14T09:02:00Z") }),
+      createGame({ visitorId: "b", visitId: reddit2.id, date_start: new Date("2026-10-14T10:01:00Z"), date_solve: new Date() }),
+      createGame({ visitorId: "a", visitId: direct.id, date_start: new Date("2026-10-15T09:01:00Z") }),
+      // Preloaded but never shown: not a round
+      createGame({ visitId: reddit1.id }),
+    ]);
+
+    const sources = await getSources("2026-10-14", "2026-10-15", "UTC");
+
+    expect(sources).toEqual([
+      { source: "reddit", kind: "utm", visitors: 2, visits: 2, rounds: 3, solved: 2, roundsPerVisitor: 1.5, solvedPerVisitor: 1 },
+      { source: "direct", kind: "direct", visitors: 1, visits: 1, rounds: 1, solved: 0, roundsPerVisitor: 1, solvedPerVisitor: 0 },
+      { source: "news.ycombinator.com", kind: "referrer", visitors: 1, visits: 1, rounds: 0, solved: 0, roundsPerVisitor: 0, solvedPerVisitor: 0 },
+    ]);
+  });
+
+  it("counts rounds by when their visit started, in the requested timezone", async () => {
+    // 03:00 UTC on the 15th is the evening of the 14th in Los Angeles
+    const visit = await createSourceVisit("a", "2026-10-15T03:00:00Z", { utmSource: "tiktok" });
+    await createGame({ visitorId: "a", visitId: visit.id, date_start: new Date("2026-10-15T03:01:00Z") });
+    await createSourceVisit("b", "2026-10-16T12:00:00Z", { utmSource: "later" });
+
+    const la = await getSources("2026-10-14", "2026-10-14", "America/Los_Angeles");
+    const utc = await getSources("2026-10-14", "2026-10-14", "UTC");
+
+    expect(la).toMatchObject([{ source: "tiktok", visits: 1, rounds: 1 }]);
+    expect(utc).toEqual([]);
   });
 });

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/db/connection";
 import { getStats } from "@/lib/analytics/stats";
 import { getRetention } from "@/lib/analytics/retention";
+import { getSources } from "@/lib/analytics/sources";
 import { isStatsKey, parseStatsRange } from "@/lib/analytics/stats-range";
 
 export async function GET(request: NextRequest) {
@@ -26,11 +27,12 @@ export async function GET(request: NextRequest) {
     const { from, to, timezone } = parseResult.data;
 
     await connectToDatabase();
-    const [stats, retention] = await Promise.all([
+    const [stats, retention, sources] = await Promise.all([
       getStats(from, to, timezone),
       getRetention(from, to, timezone),
+      getSources(from, to, timezone),
     ]);
-    return NextResponse.json({ ...stats, retention });
+    return NextResponse.json({ ...stats, retention, sources });
   } catch (error) {
     console.error("Error fetching stats:", error);
     return NextResponse.json(

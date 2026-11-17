@@ -147,7 +147,8 @@ Image.objects[].contact ---> Contact (embedded)
 6. Client-reported seconds (`solveSeconds`, `activeSeconds`) are validated by `reportedSeconds` (whole seconds, 0 to 24 h); a missing or invalid value is dropped and the event or answer check still goes ahead
 7. A round's outcome: **solved** (`date_solve`), **skipped** (`date_skip`), otherwise **abandoned** (left open or closed). `date_hidden` says when an abandoned player last left; the server can't tell a closed tab from one still open in the background
 8. `getStats(from, to, tz)` unions visits and started games, buckets them by local day, and returns per-day and whole-range visitors, visits, rounds, solves and per-visitor averages. Whole-range visitors are deduplicated, so they are not the sum of the days. It also counts sharing: **shares** (sum of `shareCount`, on the day the round was shown, since taps aren't timestamped), **shared puzzles played** (shown rounds with `sharedFrom`) and **visits from share links** (`utmSource` = `share`)
-9. Viewed at `/stats?key=STATS_KEY` (dashboard; 404 without the key) or `GET /api/stats?key=…&from=&to=&tz=` (JSON). Defaults: last 14 days, America/Los_Angeles
+9. `getSources(from, to, tz)` groups the visits that started in the range by source (`utmSource`, else `referrer`, else `direct`), with distinct visitors, visits, and the rounds and solves shown during those visits (joined via `Game.visitId`). A visitor who came from several sources counts under each
+10. Viewed at `/stats?key=STATS_KEY` (dashboard; 404 without the key) or `GET /api/stats?key=…&from=&to=&tz=` (JSON). Defaults: last 14 days, America/Los_Angeles
 - A **round** is a game that was shown, not a game that was created: preloads that are never shown have no `date_start`
 
 ### Pull-to-Submit Gesture
@@ -268,7 +269,7 @@ Image.objects[].contact ---> Contact (embedded)
 | GET    | `/api/default-contact` | Fetch default artist contact  |
 | GET    | `/api/shared-game`  | Copy a shared game into a new game for the receiver |
 | POST   | `/api/game-event`   | Record visit / round start / client-side solve / share / hide / skip |
-| GET    | `/api/stats`        | Visitor/visit/round stats and return-rate cohorts (`retention`) as JSON (needs `STATS_KEY`) |
+| GET    | `/api/stats`        | Visitor/visit/round stats and return-rate cohorts (`retention`) and per-source counts (`sources`) as JSON (needs `STATS_KEY`) |
 | GET    | `/stats`            | Stats dashboard page (needs `STATS_KEY`) |
 
 ---
