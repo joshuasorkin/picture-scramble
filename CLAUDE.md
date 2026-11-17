@@ -66,6 +66,7 @@ src/
 - [ ] Victory animation (360° spin + glitter)
 - [ ] Score increments correctly
 - [ ] Click to continue → next game
+- [ ] After click to continue, the next picture grows in from a random spot over ~2 s, smoothly on a phone (skip swaps it in at once)
 - [ ] Timer starts at 0:00, counts up, and stops on solve
 - [ ] Timer pauses while you're on another tab and resumes when you come back
 - [ ] Share button appears on solve; share sheet (phone) or "Link copied!" (desktop)

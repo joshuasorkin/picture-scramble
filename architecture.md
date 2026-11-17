@@ -166,6 +166,13 @@ Image.objects[].contact ---> Contact (embedded)
 - Each queued game's picture URL is loaded once up front so the browser has it cached
 - The first 3 requests of a page load (the first game and the 2 preloaded with it) send `savedStyle=1`, since a player may be waiting on them and a new style description adds several seconds to a new image
 
+### Picture Reveal
+1. After "click to continue", the next picture grows over the old one from a random pixel over 2 s (`REVEAL_MS` in `GameImage.tsx`); after a skip it is swapped in at once
+2. `createRevealOrder()` (`src/lib/game/reveal.ts`) gives the pixel order: each pick is a random not-yet-revealed pixel touching (incl. diagonally) a revealed one. The candidates are kept in an array with O(1) swap-removal, so every pick costs the same; picking a random revealed pixel and retrying until a neighbor is free slows to a crawl as the picture fills
+3. `GameImage` loads both pictures with `crossOrigin="anonymous"`, draws them at the new picture's full size (1024×1024) into a `<canvas>` laid over the `<img>`, and only then switches the `<img>` to the new picture underneath. Each frame copies the pixels due by then (`revealTarget()`, tied to elapsed time so slow devices take bigger steps rather than a longer reveal) and draws the canvas once; the canvas is hidden when done
+4. Falls back to an instant swap when the pictures can't be read (no CORS headers on the image host, so the canvas is tainted), take over 1.5 s to load, or the player prefers reduced motion. **The R2 bucket needs a CORS policy allowing GET from the site's origin**, or every reveal falls back
+5. Measured in Node on a desktop (Nov 2026): the whole 1024×1024 order costs about 100 ms of CPU, about 1 ms per frame over a 2 s reveal; phones are expected to be several times slower
+
 ---
 
 ## Architectural Decisions

@@ -152,6 +152,16 @@ body {
   overflow: hidden;
 }
 
+/* Lies exactly over #game-image while a new picture is revealed */
+#reveal-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: auto;
+  pointer-events: none;
+}
+
 /* ---- Victory ---- */
 
 #victory-message {

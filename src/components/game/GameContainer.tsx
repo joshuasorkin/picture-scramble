@@ -15,6 +15,9 @@ export default function GameContainer() {
     useGame();
   const [helpOpen, setHelpOpen] = useState(false);
   const [rackString, setRackString] = useState("");
+  // The next picture is revealed pixel by pixel after "click to continue",
+  // but swapped in at once after a skip
+  const [revealNext, setRevealNext] = useState(false);
   const imageRef = useRef<HTMLImageElement>(null);
   const hasStarted = useRef(false);
 
@@ -41,8 +44,14 @@ export default function GameContainer() {
   );
 
   const handleVictoryClick = useCallback(() => {
+    setRevealNext(true);
     startNewGame();
   }, [startNewGame]);
+
+  const handleSkipClick = useCallback(() => {
+    setRevealNext(false);
+    skipGame();
+  }, [skipGame]);
 
   const getMessage = (): { text: string; rainbow: boolean } => {
     switch (state.status) {
@@ -73,6 +82,7 @@ export default function GameContainer() {
           isVictory={isVictory}
           compliment={state.compliment}
           onVictoryClick={handleVictoryClick}
+          revealNext={revealNext}
         />
       )}
 
@@ -108,7 +118,7 @@ export default function GameContainer() {
         clock={state.clock}
         solveSeconds={state.solveSeconds}
         onHelpClick={() => setHelpOpen(true)}
-        onSkipClick={skipGame}
+        onSkipClick={handleSkipClick}
         showSkip={isPlaying}
       />
 
