@@ -35,6 +35,17 @@ describe("image store", () => {
     expect((await sharp(stored!.body).metadata()).format).toBe("webp");
   });
 
+  it("records the style a generated image was drawn in", async () => {
+    const style = { style: "Komi folk embroidery.", coordinates: "61.2397, 50.3254", year: 1805 };
+    await store.storeImage("test", null, "English", await makePng(1), false, null, style);
+    await store.storeImage("test", null, "English", await makePng(2));
+
+    const wordDoc = await Word.findOne({ word: "test" });
+    const imageDoc = await Image.findById(wordDoc!.imageRef).lean();
+    expect(imageDoc!.objects[0]).toMatchObject(style);
+    expect(imageDoc!.objects[1]).not.toHaveProperty("style");
+  });
+
   it("finds the stored picture by word without exposing the word", async () => {
     await store.storeImage("sunrise", null, "English", await makePng());
 

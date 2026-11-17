@@ -3,6 +3,7 @@ import sharp from "sharp";
 import { Word } from "@/lib/db/models/word";
 import { Image, type ImageObject } from "@/lib/db/models/image";
 import type { Contact } from "@/lib/game/contact-info";
+import type { ImageStyle } from "@/lib/game/art-style";
 import { pickImage } from "@/lib/game/pick-image";
 import type { ExistingPicture } from "@/lib/openai/generate-picture";
 import type { ImageStorage } from "@/lib/storage/r2";
@@ -21,7 +22,8 @@ export function createImageStore(storage: ImageStorage) {
     language: string,
     buffer: Buffer | null = null,
     uploaded = false,
-    contact: Contact | null = null
+    contact: Contact | null = null,
+    style: ImageStyle | null = null
   ): Promise<string | null> {
     // Returns the stored image's public URL, or null if nothing was stored
     try {
@@ -82,6 +84,7 @@ export function createImageStore(storage: ImageStorage) {
         uploaded,
         contact: uploaded ? contact : null,
         createdAt: new Date(),
+        ...(style && { style: style.style, coordinates: style.coordinates, year: style.year }),
       });
 
       await imageDoc.save();

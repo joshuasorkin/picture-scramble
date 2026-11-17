@@ -23,12 +23,13 @@ describe("getRandomSavedArtStyle", () => {
     expect(await getRandomSavedArtStyle()).toBeNull();
   });
 
-  it("returns one of the saved styles", async () => {
+  it("returns one of the saved styles with its time and place", async () => {
     await saveArtStyle("Komi folk embroidery.", { coordinates: "61.2397, 50.3254", year: 1805 });
     await saveArtStyle("Liangzhu carved jade.", { coordinates: "30.2015, 120.1494", year: -3119 });
 
-    expect(["Komi folk embroidery.", "Liangzhu carved jade."]).toContain(
-      await getRandomSavedArtStyle()
-    );
+    expect([
+      { style: "Komi folk embroidery.", coordinates: "61.2397, 50.3254", year: 1805 },
+      { style: "Liangzhu carved jade.", coordinates: "30.2015, 120.1494", year: -3119 },
+    ]).toContainEqual(await getRandomSavedArtStyle());
   });
 });

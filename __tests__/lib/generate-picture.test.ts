@@ -38,7 +38,15 @@ describe("generatePicture", () => {
     expect(generate).toHaveBeenCalledWith(
       expect.objectContaining({ model: "gpt-image-2.5-flare", quality: "medium" })
     );
-    expect(deps.storeImage).toHaveBeenCalledWith("apple", null, "English", imageData);
+    expect(deps.storeImage).toHaveBeenCalledWith(
+      "apple",
+      null,
+      "English",
+      imageData,
+      false,
+      null,
+      expect.objectContaining({ style: STYLE })
+    );
   });
 
   it("draws the picture in the style described for a random time and place", async () => {
@@ -48,6 +56,9 @@ describe("generatePicture", () => {
 
     const question: string = chat.mock.calls[0]?.[0].messages[0].content;
     expect(question).toMatch(/GPS coordinates -?\d+\.\d{4}, -?\d+\.\d{4} in the year \d+/);
+    // Asks for a medium from the list, and for the style rather than a scene
+    expect(question).toContain("textiles or embroidery");
+    expect(question).toMatch(/not a scene/);
     const prompt: string = generate.mock.calls[0]?.[0].prompt;
     expect(prompt).toContain(`Art style: ${STYLE}`);
     expect(prompt).toMatch(/apple clearly the main subject/);
@@ -58,11 +69,19 @@ describe("generatePicture", () => {
       expect.objectContaining({ coordinates: expect.any(String), year: expect.any(Number) })
     );
     expect(deps.getRandomSavedArtStyle).not.toHaveBeenCalled();
+    // The image records the style and the time and place it came from
+    const [origin] = deps.saveArtStyle.mock.calls[0]!.slice(1);
+    expect(deps.storeImage.mock.calls[0]?.[6]).toEqual({ style: STYLE, ...origin });
   });
 
   it("reuses a saved art style without describing a new one when asked to", async () => {
     deps.findExistingPicture.mockResolvedValue(null);
-    deps.getRandomSavedArtStyle.mockResolvedValue("Komi folk embroidery in red and black.");
+    const saved = {
+      style: "Komi folk embroidery in red and black.",
+      coordinates: "61.2397, 50.3254",
+      year: 1805,
+    };
+    deps.getRandomSavedArtStyle.mockResolvedValue(saved);
 
     await generatePicture("apple", "English", deps, { savedStyle: true });
 
@@ -70,6 +89,7 @@ describe("generatePicture", () => {
     expect(deps.saveArtStyle).not.toHaveBeenCalled();
     const prompt: string = generate.mock.calls[0]?.[0].prompt;
     expect(prompt).toContain("Art style: Komi folk embroidery in red and black.");
+    expect(deps.storeImage.mock.calls[0]?.[6]).toEqual(saved);
   });
 
   it("describes a new art style when no saved one is available", async () => {
@@ -99,6 +119,10 @@ describe("generatePicture", () => {
     expect(result.picture).toBe("https://img.test/img/new.webp");
     const prompt: string = generate.mock.calls[0]?.[0].prompt;
     expect(ART_STYLES.some((style) => prompt.includes(`Art style: ${style}.`))).toBe(true);
+    // A fallback style has no time and place
+    const recorded = deps.storeImage.mock.calls[0]?.[6];
+    expect(ART_STYLES).toContain(recorded.style);
+    expect(recorded.coordinates).toBeUndefined();
   });
 
   it("throws when the generated picture cannot be stored", async () => {

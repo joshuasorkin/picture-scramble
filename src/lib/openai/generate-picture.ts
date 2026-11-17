@@ -1,6 +1,12 @@
 import { getOpenAIClient } from "./client";
 import { describeArtStyle } from "./describe-art-style";
-import { formatYear, randomArtOrigin, type ArtOrigin, type Place } from "@/lib/game/art-style";
+import {
+  formatYear,
+  randomArtOrigin,
+  type ArtOrigin,
+  type ImageStyle,
+  type Place,
+} from "@/lib/game/art-style";
 import type { Contact } from "@/lib/game/contact-info";
 import places from "@/data/places.json";
 
@@ -23,10 +29,12 @@ export interface PictureDeps {
     url: string | null,
     language: string,
     buffer?: Buffer | null,
-    uploaded?: boolean
+    uploaded?: boolean,
+    contact?: Contact | null,
+    style?: ImageStyle | null
   ) => Promise<string | null>;
   saveArtStyle: (style: string, origin: ArtOrigin) => Promise<void>;
-  getRandomSavedArtStyle: () => Promise<string | null>;
+  getRandomSavedArtStyle: () => Promise<ImageStyle | null>;
 }
 
 export interface PictureOptions {
@@ -76,7 +84,7 @@ function randomArtStyle(): string {
   return ART_STYLES[Math.floor(Math.random() * ART_STYLES.length)] ?? ART_STYLES[0]!;
 }
 
-async function chooseArtStyle(deps: PictureDeps, savedStyle: boolean): Promise<string> {
+async function chooseArtStyle(deps: PictureDeps, savedStyle: boolean): Promise<ImageStyle> {
   if (savedStyle) {
     const saved = await deps.getRandomSavedArtStyle().catch((err) => {
       console.error("Error loading a saved art style:", err);
@@ -93,10 +101,10 @@ async function chooseArtStyle(deps: PictureDeps, savedStyle: boolean): Promise<s
     deps.saveArtStyle(style, origin).catch((err) => {
       console.error("Error saving art style:", err);
     });
-    return style;
+    return { style, ...origin };
   } catch (err) {
     console.error("Error describing art style, using a fallback:", err);
-    return randomArtStyle();
+    return { style: randomArtStyle() };
   }
 }
 
@@ -107,10 +115,11 @@ export async function generateAndStorePicture(
   { savedStyle = false }: PictureOptions = {}
 ): Promise<string> {
   const client = getOpenAIClient();
+  const style = await chooseArtStyle(deps, savedStyle);
 
   const response = await client.images.generate({
     model: IMAGE_MODEL,
-    prompt: buildPicturePrompt(word, await chooseArtStyle(deps, savedStyle)),
+    prompt: buildPicturePrompt(word, style.style),
     n: 1,
     size: "1024x1024",
     quality: "medium",
@@ -127,7 +136,10 @@ export async function generateAndStorePicture(
     word,
     null,
     language,
-    Buffer.from(b64, "base64")
+    Buffer.from(b64, "base64"),
+    false,
+    null,
+    style
   );
   if (!picture) {
     throw new Error(`Failed to store generated image for '${word}'`);

@@ -1,10 +1,12 @@
 import { describe, it, expect } from "vitest";
 import {
+  ART_MEDIA,
   ERAS,
   formatYear,
   pickPlace,
   randomArtOrigin,
   randomYear,
+  shuffledArtMedia,
   type Place,
 } from "@/lib/game/art-style";
 import places from "@/data/places.json";
@@ -74,5 +76,23 @@ describe("randomArtOrigin", () => {
     expect((places as Place[]).length).toBeGreaterThan(1000);
     const origin = randomArtOrigin(places as Place[]);
     expect(origin.coordinates).toMatch(/^-?\d+\.\d{4}, -?\d+\.\d{4}$/);
+  });
+});
+
+describe("shuffledArtMedia", () => {
+  it("returns every medium once", () => {
+    const media = shuffledArtMedia();
+    expect(media).toHaveLength(ART_MEDIA.length);
+    expect(new Set(media)).toEqual(new Set(ART_MEDIA));
+  });
+
+  it("puts different media first on different draws", () => {
+    expect(shuffledArtMedia(() => 0)[0]).not.toBe(shuffledArtMedia(() => 0.9999)[0]);
+  });
+
+  it("doesn't change the list it shuffles", () => {
+    const before = [...ART_MEDIA];
+    shuffledArtMedia();
+    expect(ART_MEDIA).toEqual(before);
   });
 });

@@ -9,6 +9,12 @@ export interface ArtOrigin {
   year: number;
 }
 
+// The style an image was drawn in, with the time and place it was described
+// for. Fallback styles have no time and place.
+export interface ImageStyle extends Partial<ArtOrigin> {
+  style: string;
+}
+
 // Picked uniformly by year, 5000 BCE to now is ~70% BCE, where little art
 // survives beyond rock art and pottery. Eras are weighted towards recent ones.
 // Negative years are BCE; there is no year 0.
@@ -58,4 +64,38 @@ export function randomArtOrigin(
     coordinates: `${clampedLat.toFixed(4)}, ${wrappedLon.toFixed(4)}`,
     year: randomYear(random),
   };
+}
+
+// Asked for a culture's "most colorful" medium, the chat model picks the same
+// one for most of a region's history (Chinese art almost always became a
+// Buddhist temple mural), so each description gets these in a random order
+// and takes the first one the culture used
+export const ART_MEDIA = [
+  "painting on silk or paper",
+  "wall painting",
+  "textiles or embroidery",
+  "beadwork",
+  "featherwork",
+  "lacquerware",
+  "tilework",
+  "enamel",
+  "painted carving",
+  "woodblock prints",
+  "mosaic",
+  "stained glass",
+  "illuminated manuscripts",
+  "posters or printed graphics",
+  "painted ceramics",
+  "metalwork with inlay",
+  "paper cutting",
+  "carpets and rugs",
+];
+
+export function shuffledArtMedia(random: () => number = Math.random): string[] {
+  const media = [...ART_MEDIA];
+  for (let i = media.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1));
+    [media[i], media[j]] = [media[j]!, media[i]!];
+  }
+  return media;
 }

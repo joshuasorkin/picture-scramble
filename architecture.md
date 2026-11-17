@@ -62,7 +62,11 @@ key: string                   # R2 object key: img/<sha256 of source bytes>.webp
 uploaded: boolean             # true if user-submitted
 contact?: Contact             # artist attribution (uploads only)
 createdAt: Date
+style?: string                # art style the image was generated in (AI images only)
+coordinates?: string          # "lat, lon" the style was described for (unset for fallback styles)
+year?: number                 # year the style was described for (unset for fallback styles)
 ```
+- Generated images record their style and its time and place, so patterns in the art can be traced later; images from before this was added have none
 - At most 6 images per word (`MAX_IMAGES_PER_WORD`)
 - AI generation stops once a word is full; an upload to a full word evicts the oldest non-uploaded image
 
@@ -112,7 +116,7 @@ Image.objects[].contact ---> Contact (embedded)
    - With a topic, always asks gpt-6-luna for a list of words and picks one, avoiding (in the prompt and when picking) the words claimed on that topic and language in the last 24 hours (`recentTopicWords`). The picked word is claimed at once as a `TopicWord`, before the slow image step, so parallel preload requests can't pick the same word; a failed claim (unique index) means another request took it, and the next word in the same reply is tried. If every usable word is taken, one is reused so a narrow topic still plays
    - Without a topic, checks DB for existing word not shown today
    - For a word with stored images, `pickImage()` chooses one (uploads first) and its R2 URL is returned; an extra generated image is made in the background unless the word is full
-   - Otherwise generates a new image, stores it in R2 and returns its R2 URL. Its art style comes from a new gpt-6-luna description of a random time and place, saved as an `ArtStyle`; with `savedStyle=1` a random saved `ArtStyle` is reused instead, saving that call (falls back to a new description when none are saved)
+   - Otherwise generates a new image, stores it in R2 and returns its R2 URL. Its art style comes from a new gpt-6-luna description of a random time and place, saved as an `ArtStyle`. The description takes the first medium the culture used from `ART_MEDIA` in a random order (asked for the "most colorful" one, it chose Buddhist temple murals for most of Chinese history), and it describes how things are drawn, never what to depict, so motifs like deities and lotuses don't end up in every picture. The image records the style it was drawn in, with its coordinates and year; with `savedStyle=1` a random saved `ArtStyle` is reused instead, saving that call (falls back to a new description when none are saved)
    - Falls back to OpenAI generation with retry loop
    - After 3 repeats of words shown today, picks random word from local wordlist (`src/data/wordlist4to9.txt`, English only). It holds about 16.8k words that are in the SCOWL size-50 spell-check dictionary, lowercase (so no names or places), within the 30,000 most frequent words in movie and TV subtitles, and not on a profanity list or the script's own list of sensitive words and slurs. Rebuild it with `scripts/build-wordlist.mjs`
    - Gives up and returns 500 after 3 unexpected errors (e.g. OpenAI failures) or 20 attempts in total, so a broken image model can't make a request spin

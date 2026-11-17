@@ -6,6 +6,11 @@ export interface ImageObject {
   uploaded: boolean;
   contact?: Contact | null;
   createdAt: Date;
+  // How a generated image was drawn, for tracing patterns in the art later;
+  // unset on uploads and on images made before this was recorded
+  style?: string;
+  coordinates?: string;
+  year?: number;
 }
 
 export interface IImage extends Document {
@@ -20,6 +25,9 @@ const imageObjectSchema = new Schema<ImageObject>(
     uploaded: { type: Boolean, default: false },
     contact: { type: Schema.Types.Mixed },
     createdAt: { type: Date, required: true },
+    style: { type: String },
+    coordinates: { type: String },
+    year: { type: Number },
   },
   { _id: false }
 );
