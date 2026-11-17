@@ -1,6 +1,6 @@
 # Image Storage Migration: MongoDB → Cloudflare R2
 
-Status (2026-10-15): steps 1-6.5 done. Both `picture-scramble` and `voice-chatgpt` on Fly use the free M0 cluster `free0` (`free0.rl2dzqx.mongodb.net`, AWS us-west-2). The M10 (`cluster0.vppctmt.mongodb.net`) was paused 2026-10-16 00:30 UTC; terminate it around 2026-10-22. Atlas resumes a paused cluster automatically after 30 days, so it must be terminated before 2026-11-15 or billing restarts. Local backup: `~/backups/atlas-2026-10-11`.
+Status (2026-11-16): complete. Both `picture-scramble` and `voice-chatgpt` on Fly use the free M0 cluster `free0` (`free0.rl2dzqx.mongodb.net`, AWS us-west-2). The M10 (`cluster0.vppctmt.mongodb.net`) was paused 2026-10-16, auto-resumed by Atlas after 30 days, and terminated 2026-11-16 (no client logins in its access log beforehand). Local backup: `~/backups/atlas-2026-10-11`.
 
 ## Why
 
